@@ -11,17 +11,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _taskService = TaskService();
-  late Future<List<Task>> _tasksFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _refreshTasks();
-  }
-
-  void _refreshTasks() {
-    _tasksFuture = _taskService.getTasks();
-  }
+  String _selectedFilter = 'All';
 
   String _priorityLabel(int priority) {
     switch (priority) {
@@ -117,8 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (!mounted) return;
-
-      setState(_refreshTasks);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Task added')),
@@ -218,8 +206,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      setState(_refreshTasks);
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Task updated')),
       );
@@ -238,10 +224,6 @@ class _HomeScreenState extends State<HomeScreen> {
         task.id,
         completed: completed,
       );
-
-      if (!mounted) return;
-
-      setState(_refreshTasks);
     } catch (e) {
       if (!mounted) return;
 
@@ -277,8 +259,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      setState(_refreshTasks);
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Task deleted')),
       );
@@ -297,71 +277,122 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('My Tasks'),
       ),
-      body: FutureBuilder<List<Task>>(
-        future: _tasksFuture,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(
-              child: Text('Something went wrong loading tasks'),
-            );
-          }
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: ['All', 'Pending', 'Completed'].map((filter) {
+                final isSelected = _selectedFilter == filter;
 
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          final tasks = snapshot.data ?? [];
-
-          if (tasks.isEmpty) {
-            return const Center(
-              child: Text('No tasks yet. Tap + to add one!'),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: tasks.length,
-            itemBuilder: (context, index) {
-              final task = tasks[index];
-
-              return ListTile(
-                leading: Checkbox(
-                  value: task.completed,
-                  onChanged: (value) {
-                    if (value != null) {
-                      _toggleTask(task, value);
-                    }
-                  },
-                ),
-                title: Text(
-                  task.title,
-                  style: TextStyle(
-                    decoration: task.completed
-                        ? TextDecoration.lineThrough
-                        : TextDecoration.none,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ChoiceChip(
+                    label: Text(filter),
+                    selected: isSelected,
+                    showCheckmark: false,
+                    onSelected: (_) {
+                      setState(() {
+                        _selectedFilter = filter;
+                      });
+                    },
                   ),
-                ),
-                subtitle: Text(
-                  'Priority: ${_priorityLabel(task.priority)}',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () => _editTask(task),
+                );
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<List<Task>>(
+              stream: _taskService.getTasks(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Center(
+                    child: Text(
+                      'Something went wrong loading tasks',
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: () => _deleteTask(task),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+                  );
+                }
+
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                final allTasks = snapshot.data ?? [];
+
+                final tasks = allTasks.where((task) {
+                  if (_selectedFilter == 'Pending') {
+                    return !task.completed;
+                  }
+
+                  if (_selectedFilter == 'Completed') {
+                    return task.completed;
+                  }
+
+                  return true;
+                }).toList();
+
+                if (tasks.isEmpty) {
+                  final message = switch (_selectedFilter) {
+                    'Pending' => 'No pending tasks.',
+                    'Completed' => 'No completed tasks.',
+                    _ => 'No tasks yet. Tap + to add one!',
+                  };
+
+                  return Center(
+                    child: Text(message),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: tasks.length,
+                  itemBuilder: (context, index) {
+                    final task = tasks[index];
+
+                    return ListTile(
+                      leading: Checkbox(
+                        value: task.completed,
+                        onChanged: (value) {
+                          if (value != null) {
+                            _toggleTask(task, value);
+                          }
+                        },
+                      ),
+                      title: Text(
+                        task.title,
+                        style: TextStyle(
+                          decoration: task.completed
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Priority: ${_priorityLabel(task.priority)}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _editTask(task),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete),
+                            onPressed: () => _deleteTask(task),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addTask,

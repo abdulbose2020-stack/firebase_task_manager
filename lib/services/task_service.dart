@@ -21,16 +21,19 @@ class TaskService {
     });
   }
 
-  Future<List<Task>> getTasks() async {
-    final snapshot = await _task
-        .where('ownerId', isEqualTo: _userId)
-        .orderBy('createdAt', descending: true)
-        .get();
-
+  
+Stream<List<Task>> getTasks() {
+  return _task
+      .where('ownerId', isEqualTo: _userId)
+      .orderBy('createdAt', descending: true)
+      .limit(10)
+      .snapshots()
+      .map((snapshot) {
     return snapshot.docs.map((doc) {
       return Task.fromMap(doc.data(), doc.id);
     }).toList();
-  }
+  });
+}
 
   Future<void> updateTask(
     String id, {
