@@ -35,6 +35,33 @@ Stream<List<Task>> getTasks() {
   });
 }
 
+Stream<QuerySnapshot<Map<String, dynamic>>> watchFirstTaskPage() {
+  return _task
+  .where('ownerId', isEqualTo: _userId)
+  .orderBy('createdAt', descending: true)
+  .limit(10)
+  .snapshots();
+}
+
+Future<QuerySnapshot<Map<String, dynamic>>> getFirstTaskPage() {
+  return _task
+  .where('ownerId', isEqualTo: _userId)
+  .orderBy('createdAt', descending: true)
+  .limit(10)
+  .get();
+}
+
+Future<QuerySnapshot<Map<String, dynamic>>> getNextTaskPage(
+  QueryDocumentSnapshot<Map<String, dynamic>> lastDocument,
+) {
+  return _task
+  .where('ownerId', isEqualTo: _userId)
+  .orderBy('createdAt', descending: true)
+  .startAfterDocument(lastDocument)
+  .limit(10)
+  .get();
+}
+
   Future<void> updateTask(
     String id, {
     String? title,

@@ -1,6 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../services/task_service.dart';
 import '../models/task.dart';
+import '../services/task_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,7 +12,27 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _taskService = TaskService();
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _tasksStream;
+
   String _selectedFilter = 'All';
+  final List<Task> _additionalTasks = [];
+  final ScrollController _scrollController = ScrollController();
+
+  bool _isLoadingMore = false;
+  bool _hasMoreTasks = true;
+  QueryDocumentSnapshot<Map<String, dynamic>>? _lastDocument;
+
+  @override
+  void initState() {
+    super.initState();
+    _tasksStream = _taskService.watchFirstTaskPage();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   String _priorityLabel(int priority) {
     switch (priority) {
@@ -205,6 +226,23 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (!mounted) return;
+      setState(() {
+        final index = _additionalTasks.indexWhere(
+          (item) => item.id == task.id,
+        );
+        if (index != -1) {
+          final currentTask = _additionalTasks[index];
+
+          _additionalTasks[index] = Task(
+            id: currentTask.id,
+            title: title,
+            completed: currentTask.completed,
+            priority: priority,
+          );
+        }
+      });
+
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Task updated')),
@@ -219,19 +257,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _toggleTask(Task task, bool completed) async {
-    try {
-      await _taskService.updateTask(
-        task.id,
-        completed: completed,
-      );
-    } catch (e) {
-      if (!mounted) return;
+  try {
+    await _taskService.updateTask(
+      task.id,
+      completed: completed,
+    );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update task: $e')),
+    if (!mounted) return;
+
+    setState(() {
+      final index = _additionalTasks.indexWhere(
+        (item) => item.id == task.id,
       );
-    }
+
+      if (index != -1) {
+        _additionalTasks[index] = Task(
+          id: task.id,
+          title: task.title,
+          completed: completed,
+          priority: task.priority,
+        );
+      }
+    });
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not update task: $e')),
+    );
   }
+}
+
 
   Future<void> _deleteTask(Task task) async {
     final confirmed = await showDialog<bool>(
@@ -259,6 +315,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
+      setState(() {
+        _additionalTasks.removeWhere(
+          (item) => item.id == task.id,
+        );
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Task deleted')),
       );
@@ -269,6 +331,73 @@ class _HomeScreenState extends State<HomeScreen> {
         SnackBar(content: Text('Could not delete task: $e')),
       );
     }
+  }
+
+  Future<void> _loadMoreTasks() async {
+    if (_isLoadingMore ||
+        !_hasMoreTasks ||
+        _lastDocument == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final snapshot = await _taskService.getNextTaskPage(
+        _lastDocument!,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        if (snapshot.docs.isNotEmpty) {
+          _additionalTasks.addAll(
+            snapshot.docs.map(
+              (doc) => Task.fromMap(doc.data(), doc.id),
+            ),
+          );
+
+          _lastDocument = snapshot.docs.last;
+        }
+
+        _hasMoreTasks = snapshot.docs.length == 10;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load more tasks: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildLoadMoreButton() {
+    if (_isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: TextButton(
+          onPressed: _loadMoreTasks,
+          child: const Text('Load More Tasks'),
+        ),
+      ),
+    );
   }
 
   @override
@@ -285,13 +414,11 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: ['All', 'Pending', 'Completed'].map((filter) {
-                final isSelected = _selectedFilter == filter;
-
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: ChoiceChip(
                     label: Text(filter),
-                    selected: isSelected,
+                    selected: _selectedFilter == filter,
                     showCheckmark: false,
                     onSelected: (_) {
                       setState(() {
@@ -304,8 +431,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           Expanded(
-            child: StreamBuilder<List<Task>>(
-              stream: _taskService.getTasks(),
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _tasksStream,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return const Center(
@@ -322,7 +449,38 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                final allTasks = snapshot.data ?? [];
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: Text('No tasks available.'),
+                  );
+                }
+
+                final documents = snapshot.data!.docs;
+
+                // Initialize the cursor from the first page.
+                if (_additionalTasks.isEmpty) {
+                  _lastDocument = documents.isEmpty
+                      ? null
+                      : documents.last;
+
+                  _hasMoreTasks = documents.length == 10;
+                }
+
+                final firstPageTasks = documents.map(
+                  (doc) => Task.fromMap(doc.data(), doc.id),
+                );
+
+                // Merge pages without displaying duplicate task IDs.
+                final uniqueTasks = <String, Task>{};
+
+                for (final task in [
+                  ...firstPageTasks,
+                  ..._additionalTasks,
+                ]) {
+                  uniqueTasks[task.id] = task;
+                }
+
+                final allTasks = uniqueTasks.values.toList();
 
                 final tasks = allTasks.where((task) {
                   if (_selectedFilter == 'Pending') {
@@ -338,19 +496,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 if (tasks.isEmpty) {
                   final message = switch (_selectedFilter) {
-                    'Pending' => 'No pending tasks.',
-                    'Completed' => 'No completed tasks.',
+                    'Pending' => 'No pending tasks on loaded pages.',
+                    'Completed' =>
+                      'No completed tasks on loaded pages.',
                     _ => 'No tasks yet. Tap + to add one!',
                   };
 
-                  return Center(
-                    child: Text(message),
+                  return ListView(
+                    children: [
+                      const SizedBox(height: 80),
+                      Center(child: Text(message)),
+                      if (_hasMoreTasks) _buildLoadMoreButton(),
+                    ],
                   );
                 }
 
                 return ListView.builder(
-                  itemCount: tasks.length,
+                  itemCount:
+                      tasks.length + (_hasMoreTasks ? 1 : 0),
+                      controller: _scrollController,
                   itemBuilder: (context, index) {
+                    if (index == tasks.length) {
+                      return _buildLoadMoreButton();
+                    }
+
                     final task = tasks[index];
 
                     return ListTile(
