@@ -16,6 +16,53 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
   bool _isLoading = false;
 
+  
+Future<void> _forgotPassword() async {
+  final email = _emailController.text.trim();
+
+  if (email.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please enter your email first.'),
+      ),
+    );
+    return;
+  }
+
+  try {
+    await _authService.resetPassword(email);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('If the account is eligible, a password reset email will be sent.'),
+      ),
+    );
+  } on FirebaseAuthException catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          e.code == 'invalid-email'
+              ? 'Please enter a valid email address.'
+              : 'Could not send the reset email. Please try again.',
+        ),
+      ),
+    );
+  } catch (_) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Check your internet connection and try again.'),
+      ),
+    );
+  }
+}
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -98,6 +145,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     : const Text('Login'),
               ),
             ),
+
+            TextButton(
+              onPressed: _forgotPassword,
+              child: const Text('Forgot Password?'),
+            ),
+
             const SizedBox(height: 12),
             TextButton(
               onPressed: () {
