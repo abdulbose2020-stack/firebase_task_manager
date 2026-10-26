@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/task.dart';
+import '../services/auth_service.dart';
 import '../services/task_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,12 +13,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _taskService = TaskService();
+  final _authService = AuthService();
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _tasksStream;
 
   String _selectedFilter = 'All';
   final List<Task> _additionalTasks = [];
-  final ScrollController _scrollController = ScrollController();
-
   bool _isLoadingMore = false;
   bool _hasMoreTasks = true;
   QueryDocumentSnapshot<Map<String, dynamic>>? _lastDocument;
@@ -28,12 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _tasksStream = _taskService.watchFirstTaskPage();
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   String _priorityLabel(int priority) {
     switch (priority) {
       case 3:
@@ -42,6 +36,20 @@ class _HomeScreenState extends State<HomeScreen> {
         return 'Medium';
       default:
         return 'Low';
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      await _authService.logout();
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not log out. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -119,7 +127,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final title = result['title'] as String;
     final priority = result['priority'] as int;
 
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a task title.')),
+      );
+      return;
+    }
 
     try {
       await _taskService.addTask(
@@ -216,7 +231,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final title = result['title'] as String;
     final priority = result['priority'] as int;
 
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task title cannot be empty.')),
+      );
+      return;
+    }
 
     try {
       await _taskService.updateTask(
@@ -226,10 +248,12 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (!mounted) return;
+
       setState(() {
         final index = _additionalTasks.indexWhere(
           (item) => item.id == task.id,
         );
+
         if (index != -1) {
           final currentTask = _additionalTasks[index];
 
@@ -241,8 +265,6 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       });
-
-      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Task updated')),
@@ -257,37 +279,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _toggleTask(Task task, bool completed) async {
-  try {
-    await _taskService.updateTask(
-      task.id,
-      completed: completed,
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      final index = _additionalTasks.indexWhere(
-        (item) => item.id == task.id,
+    try {
+      await _taskService.updateTask(
+        task.id,
+        completed: completed,
       );
 
-      if (index != -1) {
-        _additionalTasks[index] = Task(
-          id: task.id,
-          title: task.title,
-          completed: completed,
-          priority: task.priority,
+      if (!mounted) return;
+
+      setState(() {
+        final index = _additionalTasks.indexWhere(
+          (item) => item.id == task.id,
         );
-      }
-    });
-  } catch (e) {
-    if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not update task: $e')),
-    );
+        if (index != -1) {
+          _additionalTasks[index] = Task(
+            id: task.id,
+            title: task.title,
+            completed: completed,
+            priority: task.priority,
+          );
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update task: $e')),
+      );
+    }
   }
-}
-
 
   Future<void> _deleteTask(Task task) async {
     final confirmed = await showDialog<bool>(
@@ -353,11 +374,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         if (snapshot.docs.isNotEmpty) {
-          _additionalTasks.addAll(
-            snapshot.docs.map(
-              (doc) => Task.fromMap(doc.data(), doc.id),
-            ),
-          );
+          final existingIds = _additionalTasks
+              .map((task) => task.id)
+              .toSet();
+
+          for (final doc in snapshot.docs) {
+            if (existingIds.add(doc.id)) {
+              _additionalTasks.add(
+                Task.fromMap(doc.data(), doc.id),
+              );
+            }
+          }
 
           _lastDocument = snapshot.docs.last;
         }
@@ -393,7 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: TextButton(
-          onPressed: _loadMoreTasks,
+          onPressed: _hasMoreTasks ? _loadMoreTasks : null,
           child: const Text('Load More Tasks'),
         ),
       ),
@@ -405,27 +432,31 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Tasks'),
+        actions: [
+          IconButton(
+            onPressed: _logout,
+            tooltip: 'Log out',
+            icon: const Icon(Icons.logout),
+          ),
+        ],
       ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
               children: ['All', 'Pending', 'Completed'].map((filter) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ChoiceChip(
-                    label: Text(filter),
-                    selected: _selectedFilter == filter,
-                    showCheckmark: false,
-                    onSelected: (_) {
-                      setState(() {
-                        _selectedFilter = filter;
-                      });
-                    },
-                  ),
+                return ChoiceChip(
+                  label: Text(filter),
+                  selected: _selectedFilter == filter,
+                  showCheckmark: false,
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedFilter = filter;
+                    });
+                  },
                 );
               }).toList(),
             ),
@@ -437,7 +468,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (snapshot.hasError) {
                   return const Center(
                     child: Text(
-                      'Something went wrong loading tasks',
+                      'Something went wrong loading tasks.',
                     ),
                   );
                 }
@@ -457,12 +488,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 final documents = snapshot.data!.docs;
 
-                // Initialize the cursor from the first page.
+                // Set the pagination cursor from the first page.
                 if (_additionalTasks.isEmpty) {
-                  _lastDocument = documents.isEmpty
-                      ? null
-                      : documents.last;
-
+                  _lastDocument =
+                      documents.isEmpty ? null : documents.last;
                   _hasMoreTasks = documents.length == 10;
                 }
 
@@ -470,7 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   (doc) => Task.fromMap(doc.data(), doc.id),
                 );
 
-                // Merge pages without displaying duplicate task IDs.
+                // Merge pages while avoiding duplicate task IDs.
                 final uniqueTasks = <String, Task>{};
 
                 for (final task in [
@@ -512,9 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 return ListView.builder(
-                  itemCount:
-                      tasks.length + (_hasMoreTasks ? 1 : 0),
-                      controller: _scrollController,
+                  itemCount: tasks.length + (_hasMoreTasks ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == tasks.length) {
                       return _buildLoadMoreButton();
@@ -546,10 +573,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
+                            tooltip: 'Edit task',
                             icon: const Icon(Icons.edit),
                             onPressed: () => _editTask(task),
                           ),
                           IconButton(
+                            tooltip: 'Delete task',
                             icon: const Icon(Icons.delete),
                             onPressed: () => _deleteTask(task),
                           ),
@@ -565,6 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addTask,
+        tooltip: 'Add task',
         child: const Icon(Icons.add),
       ),
     );
