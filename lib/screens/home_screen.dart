@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/task_service.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import '../services/user_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,11 +27,14 @@ class _HomeScreenState extends State<HomeScreen> {
   QueryDocumentSnapshot<Map<String, dynamic>>? _lastDocument;
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
+  final _userService = UserService();
+  String _displayName = '';
 
   @override
   void initState() {
     super.initState();
     _tasksStream = _taskService.watchFirstTaskPage();
+    _loadProfile();
   }
 
   String _priorityLabel(int priority) {
@@ -51,9 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not log out. Please try again.'),
-        ),
+        const SnackBar(content: Text('Could not log out. Please try again.')),
       );
     }
   }
@@ -66,6 +68,87 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _profileImage = File(pickedFile.path);
       });
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final snapshot = await _userService.getProfile();
+
+      if (!mounted || !snapshot.exists) return;
+
+      final data = snapshot.data();
+
+      if (data != null) {
+        setState(() {
+          _displayName = data['displayName'] as String? ?? '';
+        });
+      }
+    } catch (e) {
+      debugPrint('Could not load profile: $e');
+    }
+  }
+
+  Future<void> _saveProfile(String dispalyName) async {
+    try {
+      await _userService.saveProfile(
+        displayName: dispalyName,
+        profileImageUrl: null,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile save successfully.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save profile: $e')));
+    }
+  }
+
+  Future<void> _showEditProfileDialog() async {
+    final controller = TextEditingController();
+
+    try {
+      final displayName = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Edit profile'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Display name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final name = controller.text.trim();
+                if (name.isNotEmpty) {
+                  Navigator.of(dialogContext).pop(name);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+
+      if (displayName == null || displayName.isEmpty || !mounted) {
+        return;
+      }
+
+      await _saveProfile(displayName);
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -128,9 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
               TextField(
                 autofocus: true,
                 onChanged: (value) => enteredTitle = value,
-                decoration: const InputDecoration(
-                  hintText: 'Enter task title',
-                ),
+                decoration: const InputDecoration(hintText: 'Enter task title'),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
@@ -140,18 +221,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(
-                    value: 3,
-                    child: Text('High'),
-                  ),
-                  DropdownMenuItem(
-                    value: 2,
-                    child: Text('Medium'),
-                  ),
-                  DropdownMenuItem(
-                    value: 1,
-                    child: Text('Low'),
-                  ),
+                  DropdownMenuItem(value: 3, child: Text('High')),
+                  DropdownMenuItem(value: 2, child: Text('Medium')),
+                  DropdownMenuItem(value: 1, child: Text('Low')),
                 ],
                 onChanged: (value) {
                   if (value != null) {
@@ -197,22 +269,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      await _taskService.addTask(
-        title,
-        priority: priority,
-      );
+      await _taskService.addTask(title, priority: priority);
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task added')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task added')));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not add task: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not add task: $e')));
     }
   }
 
@@ -232,9 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 initialValue: task.title,
                 autofocus: true,
                 onChanged: (value) => editedTitle = value,
-                decoration: const InputDecoration(
-                  hintText: 'Enter task title',
-                ),
+                decoration: const InputDecoration(hintText: 'Enter task title'),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
@@ -244,18 +311,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(
-                    value: 3,
-                    child: Text('High'),
-                  ),
-                  DropdownMenuItem(
-                    value: 2,
-                    child: Text('Medium'),
-                  ),
-                  DropdownMenuItem(
-                    value: 1,
-                    child: Text('Low'),
-                  ),
+                  DropdownMenuItem(value: 3, child: Text('High')),
+                  DropdownMenuItem(value: 2, child: Text('Medium')),
+                  DropdownMenuItem(value: 1, child: Text('Low')),
                 ],
                 onChanged: (value) {
                   if (value != null) {
@@ -301,18 +359,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      await _taskService.updateTask(
-        task.id,
-        title: title,
-        priority: priority,
-      );
+      await _taskService.updateTask(task.id, title: title, priority: priority);
 
       if (!mounted) return;
 
       setState(() {
-        final index = _additionalTasks.indexWhere(
-          (item) => item.id == task.id,
-        );
+        final index = _additionalTasks.indexWhere((item) => item.id == task.id);
 
         if (index != -1) {
           final currentTask = _additionalTasks[index];
@@ -326,31 +378,26 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task updated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task updated')));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not edit task: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not edit task: $e')));
     }
   }
 
   Future<void> _toggleTask(Task task, bool completed) async {
     try {
-      await _taskService.updateTask(
-        task.id,
-        completed: completed,
-      );
+      await _taskService.updateTask(task.id, completed: completed);
 
       if (!mounted) return;
 
       setState(() {
-        final index = _additionalTasks.indexWhere(
-          (item) => item.id == task.id,
-        );
+        final index = _additionalTasks.indexWhere((item) => item.id == task.id);
 
         if (index != -1) {
           _additionalTasks[index] = Task(
@@ -364,9 +411,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update task: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not update task: $e')));
     }
   }
 
@@ -397,27 +444,23 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       setState(() {
-        _additionalTasks.removeWhere(
-          (item) => item.id == task.id,
-        );
+        _additionalTasks.removeWhere((item) => item.id == task.id);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task deleted')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task deleted')));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete task: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not delete task: $e')));
     }
   }
 
   Future<void> _loadMoreTasks() async {
-    if (_isLoadingMore ||
-        !_hasMoreTasks ||
-        _lastDocument == null) {
+    if (_isLoadingMore || !_hasMoreTasks || _lastDocument == null) {
       return;
     }
 
@@ -426,23 +469,17 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final snapshot = await _taskService.getNextTaskPage(
-        _lastDocument!,
-      );
+      final snapshot = await _taskService.getNextTaskPage(_lastDocument!);
 
       if (!mounted) return;
 
       setState(() {
         if (snapshot.docs.isNotEmpty) {
-          final existingIds = _additionalTasks
-              .map((task) => task.id)
-              .toSet();
+          final existingIds = _additionalTasks.map((task) => task.id).toSet();
 
           for (final doc in snapshot.docs) {
             if (existingIds.add(doc.id)) {
-              _additionalTasks.add(
-                Task.fromMap(doc.data(), doc.id),
-              );
+              _additionalTasks.add(Task.fromMap(doc.data(), doc.id));
             }
           }
 
@@ -454,9 +491,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load more tasks: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not load more tasks: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -470,9 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.all(16),
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -491,20 +526,27 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Tasks'),
+        title: Text(
+          _displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName',
+        ),
         actions: [
           IconButton(
             onPressed: _pickProfileImage,
             tooltip: 'Choose profile image',
             icon: CircleAvatar(
               backgroundImage: _profileImage != null
-              ? FileImage(_profileImage!)
-              : null,
-            child: _profileImage == null
-              ? const Icon(Icons.person)
-              : null,
+                  ? FileImage(_profileImage!)
+                  : null,
+              child: _profileImage == null ? const Icon(Icons.person) : null,
             ),
           ),
+
+          IconButton(
+            onPressed: _showEditProfileDialog,
+            tooltip: 'Edit profile',
+            icon: const Icon(Icons.edit),
+          ),
+
           IconButton(
             onPressed: _logout,
             tooltip: 'Log out',
@@ -574,31 +616,23 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return const Center(
-                    child: Text(
-                      'Something went wrong loading tasks.',
-                    ),
+                    child: Text('Something went wrong loading tasks.'),
                   );
                 }
 
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
                 if (!snapshot.hasData) {
-                  return const Center(
-                    child: Text('No tasks available.'),
-                  );
+                  return const Center(child: Text('No tasks available.'));
                 }
 
                 final documents = snapshot.data!.docs;
 
                 // Set the pagination cursor from the first page.
                 if (_additionalTasks.isEmpty) {
-                  _lastDocument =
-                      documents.isEmpty ? null : documents.last;
+                  _lastDocument = documents.isEmpty ? null : documents.last;
                   _hasMoreTasks = documents.length == 10;
                 }
 
@@ -609,10 +643,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Merge pages while avoiding duplicate task IDs.
                 final uniqueTasks = <String, Task>{};
 
-                for (final task in [
-                  ...firstPageTasks,
-                  ..._additionalTasks,
-                ]) {
+                for (final task in [...firstPageTasks, ..._additionalTasks]) {
                   uniqueTasks[task.id] = task;
                 }
 
@@ -633,8 +664,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (tasks.isEmpty) {
                   final message = switch (_selectedFilter) {
                     'Pending' => 'No pending tasks on loaded pages.',
-                    'Completed' =>
-                      'No completed tasks on loaded pages.',
+                    'Completed' => 'No completed tasks on loaded pages.',
                     _ => 'No tasks yet. Tap + to add one!',
                   };
 
