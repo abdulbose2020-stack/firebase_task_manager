@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ImagePicker _picker = ImagePicker();
   final _userService = UserService();
   String _displayName = '';
+  String? _profileImageUrl;
 
   @override
   void initState() {
@@ -82,6 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (data != null) {
         setState(() {
           _displayName = data['displayName'] as String? ?? '';
+          _profileImageUrl = data['profileImageUrl'] as String?;
         });
       }
     } catch (e) {
@@ -526,9 +528,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName',
-        ),
+        title: Text(_displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName'),
         actions: [
           IconButton(
             onPressed: _pickProfileImage,
@@ -536,8 +536,14 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: CircleAvatar(
               backgroundImage: _profileImage != null
                   ? FileImage(_profileImage!)
+                  : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
+                  ? NetworkImage(_profileImageUrl!)
                   : null,
-              child: _profileImage == null ? const Icon(Icons.person) : null,
+              child:
+                  _profileImage == null &&
+                      (_profileImageUrl == null || _profileImageUrl!.isEmpty)
+                  ? const Icon(Icons.person)
+                  : null,
             ),
           ),
 

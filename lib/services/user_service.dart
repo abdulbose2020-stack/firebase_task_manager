@@ -2,8 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class UserService {
-  final CollectionReference<Map<String, dynamic>> _users =
-      FirebaseFirestore.instance.collection('users');
+  final CollectionReference<Map<String, dynamic>> _users = FirebaseFirestore
+      .instance
+      .collection('users');
 
   String get _userId {
     final user = FirebaseAuth.instance.currentUser;
@@ -19,16 +20,20 @@ class UserService {
     required String displayName,
     String? profileImageUrl,
   }) async {
-    await _users.doc(_userId).set({
+    final data = <String, dynamic>{
       'uid': _userId,
       'displayName': displayName,
-      'profileImageUrl': profileImageUrl,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    if (profileImageUrl != null) {
+      data['profileImageUrl'] = profileImageUrl;
+    }
+
+    await _users.doc(_userId).set(data, SetOptions(merge: true));
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getProfile(
-  ) async {
+  Future<DocumentSnapshot<Map<String, dynamic>>> getProfile() async {
     return await _users.doc(_userId).get();
   }
 }
