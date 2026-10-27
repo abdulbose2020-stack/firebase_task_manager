@@ -29,6 +29,19 @@ class AuthService {
     );
   }
 
+  Future<void> sendEmailVerification() async{
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('No user is signed in.');
+    }
+
+    await user.sendEmailVerification();
+  }
+
+  bool get isEmailVerified => 
+  _auth.currentUser?.emailVerified ?? false;
+
   Future<void> logout() async{
     await _auth.signOut();
   }

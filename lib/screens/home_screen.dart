@@ -1,8 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/task.dart';
 import '../services/auth_service.dart';
 import '../services/task_service.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +24,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingMore = false;
   bool _hasMoreTasks = true;
   QueryDocumentSnapshot<Map<String, dynamic>>? _lastDocument;
+  File? _profileImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -49,6 +54,61 @@ class _HomeScreenState extends State<HomeScreen> {
         const SnackBar(
           content: Text('Could not log out. Please try again.'),
         ),
+      );
+    }
+  }
+
+  Future<void> _pickProfileImage() async {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+    );
+    if (pickedFile != null) {
+      setState(() {
+        _profileImage = File(pickedFile.path);
+      });
+    }
+  }
+
+  Future<void> _sendVerificationEmail() async {
+    try {
+      await _authService.sendEmailVerification();
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verification email sent. Check your inbox.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send verification email: $e')),
+      );
+    }
+  }
+
+  Future<void> _refreshEmailVerification() async {
+    try {
+      await FirebaseAuth.instance.currentUser?.reload();
+      if (!mounted) return;
+
+      setState(() {});
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _authService.isEmailVerified
+                ? 'Your email is verified!'
+                : 'Email is not verified yet. Open the link in your inbox, then try again.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not check verification status: $e')),
       );
     }
   }
@@ -434,6 +494,18 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('My Tasks'),
         actions: [
           IconButton(
+            onPressed: _pickProfileImage,
+            tooltip: 'Choose profile image',
+            icon: CircleAvatar(
+              backgroundImage: _profileImage != null
+              ? FileImage(_profileImage!)
+              : null,
+            child: _profileImage == null
+              ? const Icon(Icons.person)
+              : null,
+            ),
+          ),
+          IconButton(
             onPressed: _logout,
             tooltip: 'Log out',
             icon: const Icon(Icons.logout),
@@ -442,6 +514,41 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          if (!_authService.isEmailVerified)
+            Card(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Please verify your email address.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Check your inbox for the verification link. If you cannot find it, check your spam folder.',
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        ElevatedButton(
+                          onPressed: _sendVerificationEmail,
+                          child: const Text('Send verification email'),
+                        ),
+                        TextButton(
+                          onPressed: _refreshEmailVerification,
+                          child: const Text("I've verified"),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
             child: Wrap(
