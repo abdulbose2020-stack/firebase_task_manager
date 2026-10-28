@@ -18,9 +18,12 @@ class StorageService {
       contentType: extension == '.png' ? 'image/png': 'image/jpeg',
     );
 
-    await imageRef.putFile(imageFile, metadata);
-
-    return await imageRef.getDownloadURL();
+    try {
+      await imageRef.putFile(imageFile, metadata);
+      return await imageRef.getDownloadURL();
+    } on FirebaseException catch (e) {
+      throw Exception('Profile image upload failed: ${e.code}');
+    }
   }
 
   String _getFileExtension(String path) {
