@@ -14,61 +14,102 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
+
   bool _isLoading = false;
 
-  
-Future<void> _forgotPassword() async {
-  final email = _emailController.text.trim();
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
 
-  if (email.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Please enter your email first.'),
-      ),
-    );
-    return;
-  }
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email first.')),
+      );
+      return;
+    }
 
-  try {
-    await _authService.resetPassword(email);
+    final messenger = ScaffoldMessenger.of(context);
 
-    if (!mounted) return;
+    try {
+      await _authService.resetPassword(email);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('If the account is eligible, a password reset email will be sent.'),
-      ),
-    );
-  } on FirebaseAuthException catch (e) {
-    if (!mounted) return;
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          e.code == 'invalid-email'
-              ? 'Please enter a valid email address.'
-              : 'Could not send the reset email. Please try again.',
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'If the account is eligible, a password reset email will be sent.',
+          ),
         ),
-      ),
-    );
-  } catch (_) {
-    if (!mounted) return;
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Check your internet connection and try again.'),
-      ),
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == 'invalid-email'
+                ? 'Please enter a valid email address.'
+                : 'Could not send the reset email. Please try again.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Check your internet connection and try again.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await _authService.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        SnackBar(content: Text(_loginErrorMessage(e.code))),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _openRegisterScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RegisterScreen()),
     );
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Login'),
-      ),
+      appBar: AppBar(title: const Text('Login')),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -76,6 +117,7 @@ Future<void> _forgotPassword() async {
             TextField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
               decoration: const InputDecoration(
                 labelText: 'Email',
                 border: OutlineInputBorder(),
@@ -85,82 +127,38 @@ Future<void> _forgotPassword() async {
             TextField(
               controller: _passwordController,
               obscureText: true,
+              autofillHints: const [AutofillHints.password],
               decoration: const InputDecoration(
                 labelText: 'Password',
                 border: OutlineInputBorder(),
               ),
+              onSubmitted: (_) {
+                if (!_isLoading) {
+                  _login();
+                }
+              },
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isLoading
-                    ? null
-                    : () async {
-                        setState(() {
-                          _isLoading = true;
-                        });
-
-                        try {
-                          await _authService.login(
-                            _emailController.text,
-                            _passwordController.text,
-                          );
-                        } on FirebaseAuthException catch (e) {
-                          if (!mounted) return;
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                _loginErrorMessage(e.code),
-                              ),
-                            ),
-                          );
-                        } catch (e) {
-                          if (!mounted) return;
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Something went wrong. Please try again.',
-                              ),
-                            ),
-                          );
-                        } finally {
-                          if (mounted) {
-                            setState(() {
-                              _isLoading = false;
-                            });
-                          }
-                        }
-                      },
+                onPressed: _isLoading ? null : _login,
                 child: _isLoading
                     ? const SizedBox(
-                        height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Text('Login'),
               ),
             ),
-
             TextButton(
-              onPressed: _forgotPassword,
+              onPressed: _isLoading ? null : _forgotPassword,
               child: const Text('Forgot Password?'),
             ),
-
             const SizedBox(height: 12),
             TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const RegisterScreen(),
-                  ),
-                );
-              },
+              onPressed: _openRegisterScreen,
               child: const Text("Don't have an account? Register"),
             ),
           ],

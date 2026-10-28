@@ -7,6 +7,8 @@ import '../services/task_service.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../services/user_service.dart';
+import '../services/storage_service.dart';
+import '../widgets/task_tile.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _userService = UserService();
   String _displayName = '';
   String? _profileImageUrl;
+  final _storageService = StorageService();
 
   @override
   void initState() {
@@ -65,10 +68,43 @@ class _HomeScreenState extends State<HomeScreen> {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
     );
-    if (pickedFile != null) {
+
+    if (pickedFile == null || !mounted) return;
+
+    final imageFile = File(pickedFile.path);
+
+    setState(() {
+      _profileImage = imageFile;
+    });
+
+    try {
+      final imageUrl = await _storageService.uploadProfileImage(
+        userId: FirebaseAuth.instance.currentUser!.uid,
+        imageFile: imageFile,
+      );
+
+      await _userService.saveProfile(
+        displayName: _displayName,
+        profileImageUrl: imageUrl,
+      );
+
+      if (!mounted) return;
+
       setState(() {
-        _profileImage = File(pickedFile.path);
+        _profileImageUrl = imageUrl;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile image saved successfully!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save profile image. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -103,9 +139,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not save profile: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save profile. Please try again.')),
+      );
     }
   }
 
@@ -168,7 +204,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send verification email: $e')),
+        SnackBar(
+          content: Text('Could not send verification email. Please try again.'),
+        ),
       );
     }
   }
@@ -193,12 +231,17 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not check verification status: $e')),
+        SnackBar(
+          content: Text(
+            'Could not check verification status. Please try again.',
+          ),
+        ),
       );
     }
   }
 
   Future<void> _addTask() async {
+    final formKey = GlobalKey<FormState>();
     var enteredTitle = '';
     var selectedPriority = 2;
 
@@ -207,35 +250,46 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Add Task'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                autofocus: true,
-                onChanged: (value) => enteredTitle = value,
-                decoration: const InputDecoration(hintText: 'Enter task title'),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: selectedPriority,
-                decoration: const InputDecoration(
-                  labelText: 'Priority',
-                  border: OutlineInputBorder(),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  autofocus: true,
+                  onChanged: (value) => enteredTitle = value,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter task title',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a task title.';
+                    }
+                    return null;
+                  },
                 ),
-                items: const [
-                  DropdownMenuItem(value: 3, child: Text('High')),
-                  DropdownMenuItem(value: 2, child: Text('Medium')),
-                  DropdownMenuItem(value: 1, child: Text('Low')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setDialogState(() {
-                      selectedPriority = value;
-                    });
-                  }
-                },
-              ),
-            ],
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: selectedPriority,
+                  decoration: const InputDecoration(
+                    labelText: 'Priority',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 3, child: Text('High')),
+                    DropdownMenuItem(value: 2, child: Text('Medium')),
+                    DropdownMenuItem(value: 1, child: Text('Low')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() {
+                        selectedPriority = value;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -244,6 +298,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             TextButton(
               onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+
                 Navigator.pop(dialogContext, {
                   'title': enteredTitle.trim(),
                   'priority': selectedPriority,
@@ -261,15 +317,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final title = result['title'] as String;
     final priority = result['priority'] as int;
 
-    if (title.isEmpty) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a task title.')),
-      );
-      return;
-    }
-
     try {
       await _taskService.addTask(title, priority: priority);
 
@@ -277,17 +324,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Task added')));
-    } catch (e) {
+      ).showSnackBar(const SnackBar(content: Text('Task added successfully.')));
+    } catch (e, stackTrace) {
+      debugPrint('Could not add task: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not add task: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not add task. Please try again.')),
+      );
     }
   }
 
   Future<void> _editTask(Task task) async {
+    final formKey = GlobalKey<FormState>();
     var editedTitle = task.title;
     var selectedPriority = task.priority;
 
@@ -296,36 +347,47 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Edit Task'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                initialValue: task.title,
-                autofocus: true,
-                onChanged: (value) => editedTitle = value,
-                decoration: const InputDecoration(hintText: 'Enter task title'),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: selectedPriority,
-                decoration: const InputDecoration(
-                  labelText: 'Priority',
-                  border: OutlineInputBorder(),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  initialValue: task.title,
+                  autofocus: true,
+                  onChanged: (value) => editedTitle = value,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter task title',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Task title cannot be empty.';
+                    }
+                    return null;
+                  },
                 ),
-                items: const [
-                  DropdownMenuItem(value: 3, child: Text('High')),
-                  DropdownMenuItem(value: 2, child: Text('Medium')),
-                  DropdownMenuItem(value: 1, child: Text('Low')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setDialogState(() {
-                      selectedPriority = value;
-                    });
-                  }
-                },
-              ),
-            ],
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: selectedPriority,
+                  decoration: const InputDecoration(
+                    labelText: 'Priority',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 3, child: Text('High')),
+                    DropdownMenuItem(value: 2, child: Text('Medium')),
+                    DropdownMenuItem(value: 1, child: Text('Low')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() {
+                        selectedPriority = value;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -334,6 +396,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             TextButton(
               onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+
                 Navigator.pop(dialogContext, {
                   'title': editedTitle.trim(),
                   'priority': selectedPriority,
@@ -350,15 +414,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final title = result['title'] as String;
     final priority = result['priority'] as int;
-
-    if (title.isEmpty) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task title cannot be empty.')),
-      );
-      return;
-    }
 
     try {
       await _taskService.updateTask(task.id, title: title, priority: priority);
@@ -380,15 +435,20 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Task updated')));
-    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task updated successfully.')),
+      );
+    } catch (e, stackTrace) {
+      debugPrint('Could not edit task: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not edit task: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update task. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -410,12 +470,17 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Could not update task: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not update task: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update task. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -455,9 +520,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not delete task: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete task. Please try again.')),
+      );
     }
   }
 
@@ -493,9 +558,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not load more tasks: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load more tasks. Please try again.')),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -621,8 +686,25 @@ class _HomeScreenState extends State<HomeScreen> {
               stream: _tasksStream,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return const Center(
-                    child: Text('Something went wrong loading tasks.'),
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Something went wrong loading tasks.'),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _tasksStream = _taskService.watchFirstTaskPage();
+                              _additionalTasks.clear();
+                              _lastDocument = null;
+                              _hasMoreTasks = true;
+                            });
+                          },
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
                   );
                 }
 
@@ -692,41 +774,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     final task = tasks[index];
 
-                    return ListTile(
-                      leading: Checkbox(
-                        value: task.completed,
-                        onChanged: (value) {
-                          if (value != null) {
-                            _toggleTask(task, value);
-                          }
-                        },
-                      ),
-                      title: Text(
-                        task.title,
-                        style: TextStyle(
-                          decoration: task.completed
-                              ? TextDecoration.lineThrough
-                              : TextDecoration.none,
-                        ),
-                      ),
-                      subtitle: Text(
-                        'Priority: ${_priorityLabel(task.priority)}',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'Edit task',
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _editTask(task),
-                          ),
-                          IconButton(
-                            tooltip: 'Delete task',
-                            icon: const Icon(Icons.delete),
-                            onPressed: () => _deleteTask(task),
-                          ),
-                        ],
-                      ),
+                    return TaskTile(
+                      task: task,
+                      priorityLabel: _priorityLabel(task.priority),
+                      onToggle: (value) => _toggleTask(task, value),
+                      onEdit: () => _editTask(task),
+                      onDelete: () => _deleteTask(task),
                     );
                   },
                 );
