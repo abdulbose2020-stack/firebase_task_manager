@@ -21,26 +21,24 @@ class TaskService {
     });
   }
 
-  
-Stream<List<Task>> getTasks() {
-  return _task
-      .where('ownerId', isEqualTo: _userId)
-      .orderBy('createdAt', descending: true)
-      .limit(10)
-      .snapshots()
-      .map((snapshot) {
-    return snapshot.docs.map((doc) {
-      return Task.fromMap(doc.data(), doc.id);
-    }).toList();
-  });
-}
-
+  Stream<List<Task>> getTasks() {
+    return _task
+        .where('ownerId', isEqualTo: _userId)
+        .orderBy('createdAt', descending: true)
+        .limit(10)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return Task.fromMap(doc.data(), doc.id);
+      }).toList();
+    });
+  }
 
   Query<Map<String, dynamic>> _buildTaskQuery({
     bool? completed,
   }) {
-    Query<Map<String, dynamic>> query = _task
-        .where('ownerId', isEqualTo: _userId);
+    Query<Map<String, dynamic>> query =
+        _task.where('ownerId', isEqualTo: _userId);
 
     if (completed != null) {
       query = query.where('completed', isEqualTo: completed);
@@ -60,9 +58,7 @@ Stream<List<Task>> getTasks() {
   Future<QuerySnapshot<Map<String, dynamic>>> getFirstTaskPage({
     bool? completed,
   }) {
-    return _buildTaskQuery(completed: completed)
-        .limit(10)
-        .get();
+    return _buildTaskQuery(completed: completed).limit(10).get();
   }
 
   Future<QuerySnapshot<Map<String, dynamic>>> getNextTaskPage(
@@ -74,7 +70,6 @@ Stream<List<Task>> getTasks() {
         .limit(10)
         .get();
   }
-
 
   Future<void> updateTask(
     String id, {
@@ -91,6 +86,27 @@ Stream<List<Task>> getTasks() {
     if (updates.isEmpty) return;
 
     await _task.doc(id).update(updates);
+  }
+
+  Future<void> completeTaskSafely(String id) async {
+    final taskRef = _task.doc(id);
+
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      final snapshot = await transaction.get(taskRef);
+
+      if (!snapshot.exists) {
+        throw Exception('Task not found');
+      }
+
+      final data = snapshot.data()!;
+      final isCompleted = data['completed'] as bool? ?? false;
+
+      if (isCompleted) return;
+
+      transaction.update(taskRef, {
+        'completed': true,
+      });
+    });
   }
 
   Future<void> deleteTask(String id) async {
