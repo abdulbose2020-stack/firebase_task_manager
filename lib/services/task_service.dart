@@ -35,32 +35,46 @@ Stream<List<Task>> getTasks() {
   });
 }
 
-Stream<QuerySnapshot<Map<String, dynamic>>> watchFirstTaskPage() {
-  return _task
-  .where('ownerId', isEqualTo: _userId)
-  .orderBy('createdAt', descending: true)
-  .limit(10)
-  .snapshots();
-}
 
-Future<QuerySnapshot<Map<String, dynamic>>> getFirstTaskPage() {
-  return _task
-  .where('ownerId', isEqualTo: _userId)
-  .orderBy('createdAt', descending: true)
-  .limit(10)
-  .get();
-}
+  Query<Map<String, dynamic>> _buildTaskQuery({
+    bool? completed,
+  }) {
+    Query<Map<String, dynamic>> query = _task
+        .where('ownerId', isEqualTo: _userId);
 
-Future<QuerySnapshot<Map<String, dynamic>>> getNextTaskPage(
-  QueryDocumentSnapshot<Map<String, dynamic>> lastDocument,
-) {
-  return _task
-  .where('ownerId', isEqualTo: _userId)
-  .orderBy('createdAt', descending: true)
-  .startAfterDocument(lastDocument)
-  .limit(10)
-  .get();
-}
+    if (completed != null) {
+      query = query.where('completed', isEqualTo: completed);
+    }
+
+    return query.orderBy('createdAt', descending: true);
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchFirstTaskPage({
+    bool? completed,
+  }) {
+    return _buildTaskQuery(completed: completed)
+        .limit(10)
+        .snapshots();
+  }
+
+  Future<QuerySnapshot<Map<String, dynamic>>> getFirstTaskPage({
+    bool? completed,
+  }) {
+    return _buildTaskQuery(completed: completed)
+        .limit(10)
+        .get();
+  }
+
+  Future<QuerySnapshot<Map<String, dynamic>>> getNextTaskPage(
+    QueryDocumentSnapshot<Map<String, dynamic>> lastDocument, {
+    bool? completed,
+  }) {
+    return _buildTaskQuery(completed: completed)
+        .startAfterDocument(lastDocument)
+        .limit(10)
+        .get();
+  }
+
 
   Future<void> updateTask(
     String id, {

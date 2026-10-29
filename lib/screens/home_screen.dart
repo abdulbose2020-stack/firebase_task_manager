@@ -20,7 +20,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _taskService = TaskService();
   final _authService = AuthService();
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _tasksStream;
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _tasksStream;
 
   String _selectedFilter = 'All';
   final List<Task> _additionalTasks = [];
@@ -34,10 +34,21 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _profileImageUrl;
   final _storageService = StorageService();
 
+  bool? get _completedFilter {
+    switch (_selectedFilter) {
+      case 'Pending':
+        return false;
+      case 'Completed':
+        return true;
+      default:
+        return null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _tasksStream = _taskService.watchFirstTaskPage();
+    _tasksStream = _taskService.watchFirstTaskPage(completed: _completedFilter);
     _loadProfile();
   }
 
@@ -536,8 +547,10 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final snapshot = await _taskService.getNextTaskPage(_lastDocument!);
-
+      final snapshot = await _taskService.getNextTaskPage(
+        _lastDocument!,
+        completed: _completedFilter,
+      );
       if (!mounted) return;
 
       setState(() {
@@ -675,6 +688,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   onSelected: (_) {
                     setState(() {
                       _selectedFilter = filter;
+                      _tasksStream = _taskService.watchFirstTaskPage(
+                        completed: _completedFilter,
+                      );
+                      _additionalTasks.clear();
+                      _lastDocument = null;
+                      _isLoadingMore = false;
+                      _hasMoreTasks = true;
                     });
                   },
                 );
@@ -695,7 +715,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         ElevatedButton(
                           onPressed: () {
                             setState(() {
-                              _tasksStream = _taskService.watchFirstTaskPage();
+                              _tasksStream = _taskService.watchFirstTaskPage(
+                                completed: _completedFilter,
+                              );
                               _additionalTasks.clear();
                               _lastDocument = null;
                               _hasMoreTasks = true;
@@ -737,17 +759,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 final allTasks = uniqueTasks.values.toList();
 
-                final tasks = allTasks.where((task) {
-                  if (_selectedFilter == 'Pending') {
-                    return !task.completed;
-                  }
-
-                  if (_selectedFilter == 'Completed') {
-                    return task.completed;
-                  }
-
-                  return true;
-                }).toList();
+                final tasks = allTasks;
 
                 if (tasks.isEmpty) {
                   final message = switch (_selectedFilter) {
