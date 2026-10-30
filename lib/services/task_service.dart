@@ -3,15 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/task.dart';
 
 class TaskService {
-  final CollectionReference<Map<String, dynamic>> _task =
-      FirebaseFirestore.instance.collection('tasks');
+  final CollectionReference<Map<String, dynamic>> _task = FirebaseFirestore
+      .instance
+      .collection('tasks');
 
   String get _userId => FirebaseAuth.instance.currentUser!.uid;
 
-  Future<void> addTask(
-    String title, {
-    required int priority,
-  }) async {
+  Future<void> addTask(String title, {required int priority}) async {
     await _task.add({
       'ownerId': _userId,
       'title': title,
@@ -28,17 +26,17 @@ class TaskService {
         .limit(10)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return Task.fromMap(doc.data(), doc.id);
-      }).toList();
-    });
+          return snapshot.docs.map((doc) {
+            return Task.fromMap(doc.data(), doc.id);
+          }).toList();
+        });
   }
 
-  Query<Map<String, dynamic>> _buildTaskQuery({
-    bool? completed,
-  }) {
-    Query<Map<String, dynamic>> query =
-        _task.where('ownerId', isEqualTo: _userId);
+  Query<Map<String, dynamic>> _buildTaskQuery({bool? completed}) {
+    Query<Map<String, dynamic>> query = _task.where(
+      'ownerId',
+      isEqualTo: _userId,
+    );
 
     if (completed != null) {
       query = query.where('completed', isEqualTo: completed);
@@ -50,9 +48,7 @@ class TaskService {
   Stream<QuerySnapshot<Map<String, dynamic>>> watchFirstTaskPage({
     bool? completed,
   }) {
-    return _buildTaskQuery(completed: completed)
-        .limit(10)
-        .snapshots();
+    return _buildTaskQuery(completed: completed).limit(10).snapshots();
   }
 
   Future<QuerySnapshot<Map<String, dynamic>>> getFirstTaskPage({
@@ -65,10 +61,9 @@ class TaskService {
     QueryDocumentSnapshot<Map<String, dynamic>> lastDocument, {
     bool? completed,
   }) {
-    return _buildTaskQuery(completed: completed)
-        .startAfterDocument(lastDocument)
-        .limit(10)
-        .get();
+    return _buildTaskQuery(
+      completed: completed,
+    ).startAfterDocument(lastDocument).limit(10).get();
   }
 
   Future<void> updateTask(
@@ -103,13 +98,22 @@ class TaskService {
 
       if (isCompleted) return;
 
-      transaction.update(taskRef, {
-        'completed': true,
-      });
+      transaction.update(taskRef, {'completed': true});
     });
   }
 
   Future<void> deleteTask(String id) async {
     await _task.doc(id).delete();
+  }
+
+  Future<void> deleteTasks(List<String> ids) async {
+    final batch = FirebaseFirestore.instance.batch();
+
+    for (final id in ids) {
+      final taskRef = _task.doc(id);
+      batch.delete(taskRef);
+    }
+
+    await batch.commit();
   }
 }
