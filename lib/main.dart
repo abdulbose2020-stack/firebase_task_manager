@@ -44,6 +44,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Firebase Task Manager',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
