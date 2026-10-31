@@ -17,6 +17,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
 
+  Future<void> _continueAsGuest() async {
+    setState(() => _isLoading = true);
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await _authService.signInAnonymously();
+    } catch (_) {
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Guest sign-in failed. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Future<void> _forgotPassword() async {
     final email = _emailController.text.trim();
 
@@ -160,6 +182,11 @@ class _LoginScreenState extends State<LoginScreen> {
             TextButton(
               onPressed: _openRegisterScreen,
               child: const Text("Don't have an account? Register"),
+            ),
+
+            TextButton(
+              onPressed: _isLoading ? null : _continueAsGuest,
+              child: const Text('Continue as Guest'),
             ),
           ],
         ),

@@ -3,33 +3,29 @@ import 'package:firebase_auth/firebase_auth.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Future<UserCredential> register(
-    String email,
-    String password,
-  ) async {
+  Future<UserCredential> register(String email, String password) async {
     return await _auth.createUserWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
   }
 
-  Future<UserCredential> login(
-    String email,
-    String password,
-  ) async {
+  Future<UserCredential> login(String email, String password) async {
     return await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
   }
 
-  Future<void> resetPassword(String email) async{
-    await _auth.sendPasswordResetEmail(
-      email: email.trim()
-    );
+  Future<UserCredential> signInAnonymously() async {
+    return await _auth.signInAnonymously();
   }
 
-  Future<void> sendEmailVerification() async{
+  Future<void> resetPassword(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  Future<void> sendEmailVerification() async {
     final user = _auth.currentUser;
 
     if (user == null) {
@@ -39,10 +35,9 @@ class AuthService {
     await user.sendEmailVerification();
   }
 
-  bool get isEmailVerified => 
-  _auth.currentUser?.emailVerified ?? false;
+  bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
 
-  Future<void> logout() async{
+  Future<void> logout() async {
     await _auth.signOut();
   }
 

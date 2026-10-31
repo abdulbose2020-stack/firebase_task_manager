@@ -1,1 +1,36 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"flutter-firebase-task-ma-dbd31","appId":"1:508129552578:android:4480d3cc55182357beb35b","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"flutter-firebase-task-ma-dbd31","configurations":{"android":"1:508129552578:android:4480d3cc55182357beb35b"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "flutter-firebase-task-ma-dbd31",
+          "appId": "1:508129552578:android:4480d3cc55182357beb35b",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "flutter-firebase-task-ma-dbd31",
+          "configurations": {
+            "android": "1:508129552578:android:4480d3cc55182357beb35b"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": true
+    },
+    "singleProjectMode": true
+  }
+}
