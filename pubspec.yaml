@@ -40,6 +40,7 @@ dependencies:
   image_picker: ^1.2.4
   firebase_storage: ^14.0.1
   firebase_app_check: ^0.5.1
+  firebase_crashlytics: ^6.0.1
 
 dev_dependencies:
   flutter_test:

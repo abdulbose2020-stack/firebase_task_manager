@@ -29,6 +29,19 @@ async function runTest() {
         const guestB = testEnv.authenticatedContext(
             'ng6Vay7mpZ3rtzjDqcrSljcDSEhY'
         );
+
+        // Create test data without applying Firestore security rules.
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(
+                doc(context.firestore(), 'tasks/A1yiDITSuRAb94Cmh5aU'),
+                {
+                    ownerId: 'EeMwymplGnO2Ds80h1riORuopil7',
+                    title: 'Test task',
+                    completed: false,
+                    priority: 2,
+                }
+            );
+        });
         const guestBDb = guestB.firestore();
 
         const guestA = testEnv.authenticatedContext(
