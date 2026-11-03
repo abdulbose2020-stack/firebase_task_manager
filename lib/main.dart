@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+//import 'package:firebase_auth/firebase_auth.dart';
+//import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
 import 'screens/auth_wrapper.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:provider/provider.dart';
+import 'providers/task_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,12 +32,17 @@ void main() async {
         : const AndroidPlayIntegrityProvider(),
   );
 
-  if (kDebugMode) {
-    await FirebaseAuth.instance.useAuthEmulator('10.0.2.2', 9099);
-    FirebaseFirestore.instance.useFirestoreEmulator('10.0.2.2', 8080);
-  }
+  //if (kDebugMode) {
+  //  await FirebaseAuth.instance.useAuthEmulator('10.0.2.2', 9099);
+  //  FirebaseFirestore.instance.useFirestoreEmulator('10.0.2.2', 8080);
+  //}
 
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => TaskProvider(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

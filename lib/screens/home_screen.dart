@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_task_manager/providers/task_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../services/auth_service.dart';
 import '../services/task_service.dart';
@@ -22,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final _authService = AuthService();
   late Stream<QuerySnapshot<Map<String, dynamic>>> _tasksStream;
 
-  String _selectedFilter = 'All';
   final List<Task> _additionalTasks = [];
   bool _isLoadingMore = false;
   bool _hasMoreTasks = true;
@@ -34,8 +35,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _profileImageUrl;
   final _storageService = StorageService();
 
+
   bool? get _completedFilter {
-    switch (_selectedFilter) {
+    final filter  = context.read<TaskProvider>().selectedFilter;
+    switch (filter) {
       case 'Pending':
         return false;
       case 'Completed':
@@ -604,6 +607,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedFilter = context.watch<TaskProvider>().selectedFilter;
     return Scaffold(
       appBar: AppBar(
         title: Text(_displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName'),
@@ -683,13 +687,18 @@ class _HomeScreenState extends State<HomeScreen> {
               children: ['All', 'Pending', 'Completed'].map((filter) {
                 return ChoiceChip(
                   label: Text(filter),
-                  selected: _selectedFilter == filter,
+                  selected: selectedFilter == filter,
                   showCheckmark: false,
                   onSelected: (_) {
+                    context.read<TaskProvider>().changeFilter(filter);
+
                     setState(() {
-                      _selectedFilter = filter;
                       _tasksStream = _taskService.watchFirstTaskPage(
-                        completed: _completedFilter,
+                        completed: filter == 'Pending'
+                            ? false
+                            : filter == 'Completed'
+                                ? true
+                                : null,
                       );
                       _additionalTasks.clear();
                       _lastDocument = null;
@@ -762,7 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final tasks = allTasks;
 
                 if (tasks.isEmpty) {
-                  final message = switch (_selectedFilter) {
+                  final message = switch (selectedFilter) {
                     'Pending' => 'No pending tasks on loaded pages.',
                     'Completed' => 'No completed tasks on loaded pages.',
                     _ => 'No tasks yet. Tap + to add one!',
