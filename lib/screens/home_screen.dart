@@ -254,291 +254,331 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _addTask() async {
-    final formKey = GlobalKey<FormState>();
-    var enteredTitle = '';
-    var selectedPriority = 2;
+  
+Future<void> _addTask() async {
+  final formKey = GlobalKey<FormState>();
+  var enteredTitle = '';
+  var selectedPriority = 2;
+  var isSaving = false;
 
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Task'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  autofocus: true,
-                  onChanged: (value) => enteredTitle = value,
-                  decoration: const InputDecoration(
-                    hintText: 'Enter task title',
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter a task title.';
-                    }
-                    return null;
-                  },
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Add Task'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                autofocus: true,
+                onChanged: (value) => enteredTitle = value,
+                decoration: const InputDecoration(
+                  hintText: 'Enter task title',
                 ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: selectedPriority,
-                  decoration: const InputDecoration(
-                    labelText: 'Priority',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 3, child: Text('High')),
-                    DropdownMenuItem(value: 2, child: Text('Medium')),
-                    DropdownMenuItem(value: 1, child: Text('Low')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() {
-                        selectedPriority = value;
-                      });
-                    }
-                  },
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter a task title.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                initialValue: selectedPriority,
+                decoration: const InputDecoration(
+                  labelText: 'Priority',
+                  border: OutlineInputBorder(),
                 ),
-              ],
-            ),
+                items: const [
+                  DropdownMenuItem(value: 3, child: Text('High')),
+                  DropdownMenuItem(value: 2, child: Text('Medium')),
+                  DropdownMenuItem(value: 1, child: Text('Low')),
+                ],
+                onChanged: isSaving
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            selectedPriority = value;
+                          });
+                        }
+                      },
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-
-                Navigator.pop(dialogContext, {
-                  'title': enteredTitle.trim(),
-                  'priority': selectedPriority,
-                });
-              },
-              child: const Text('Add'),
-            ),
-          ],
         ),
-      ),
-    );
-
-    if (result == null) return;
-
-    final title = result['title'] as String;
-    final priority = result['priority'] as int;
-
-    try {
-      await _taskService.addTask(title, priority: priority);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Task added successfully.')));
-    } catch (e, stackTrace) {
-      debugPrint('Could not add task: $e');
-      debugPrintStack(stackTrace: stackTrace);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not add task. Please try again.')),
-      );
-    }
-  }
-
-  Future<void> _editTask(Task task) async {
-    final formKey = GlobalKey<FormState>();
-    var editedTitle = task.title;
-    var selectedPriority = task.priority;
-
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit Task'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  initialValue: task.title,
-                  autofocus: true,
-                  onChanged: (value) => editedTitle = value,
-                  decoration: const InputDecoration(
-                    hintText: 'Enter task title',
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Task title cannot be empty.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: selectedPriority,
-                  decoration: const InputDecoration(
-                    labelText: 'Priority',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 3, child: Text('High')),
-                    DropdownMenuItem(value: 2, child: Text('Medium')),
-                    DropdownMenuItem(value: 1, child: Text('Low')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() {
-                        selectedPriority = value;
-                      });
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-
-                Navigator.pop(dialogContext, {
-                  'title': editedTitle.trim(),
-                  'priority': selectedPriority,
-                });
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == null) return;
-
-    final title = result['title'] as String;
-    final priority = result['priority'] as int;
-
-    try {
-      await _taskService.updateTask(task.id, title: title, priority: priority);
-
-      if (!mounted) return;
-
-      setState(() {
-        final index = _additionalTasks.indexWhere((item) => item.id == task.id);
-
-        if (index != -1) {
-          final currentTask = _additionalTasks[index];
-
-          _additionalTasks[index] = Task(
-            id: currentTask.id,
-            title: title,
-            completed: currentTask.completed,
-            priority: priority,
-          );
-        }
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task updated successfully.')),
-      );
-    } catch (e, stackTrace) {
-      debugPrint('Could not edit task: $e');
-      debugPrintStack(stackTrace: stackTrace);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not update task. Please try again.'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _toggleTask(Task task, bool completed) async {
-    try {
-      await _taskService.updateTask(task.id, completed: completed);
-
-      if (!mounted) return;
-
-      setState(() {
-        final index = _additionalTasks.indexWhere((item) => item.id == task.id);
-
-        if (index != -1) {
-          _additionalTasks[index] = Task(
-            id: task.id,
-            title: task.title,
-            completed: completed,
-            priority: task.priority,
-          );
-        }
-      });
-    } catch (e, stackTrace) {
-      debugPrint('Could not update task: $e');
-      debugPrintStack(stackTrace: stackTrace);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not update task. Please try again.'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _deleteTask(Task task) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Task?'),
-        content: Text('Delete "${task.title}"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: isSaving
+                ? null
+                : () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
+            onPressed: isSaving
+                ? null
+                : () async {
+                    if (!formKey.currentState!.validate()) return;
+
+                    setDialogState(() => isSaving = true);
+
+                    final provider = context.read<TaskProvider>();
+
+                    final success = await provider.addTask(
+                      enteredTitle.trim(),
+                      priority: selectedPriority,
+                    );
+
+                    if (!dialogContext.mounted) return;
+
+                    if (success) {
+                      Navigator.pop(dialogContext, true);
+                    } else {
+                      setDialogState(() => isSaving = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            provider.errorMessage ??
+                                'Could not add task.',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+            child: isSaving
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text('Add'),
           ),
         ],
       ),
+    ),
+  );
+
+  if (result != true || !mounted) return;
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Task added successfully.'),
+    ),
+  );
+}
+
+
+Future<void> _editTask(Task task) async {
+  final formKey = GlobalKey<FormState>();
+  var editedTitle = task.title;
+  var selectedPriority = task.priority;
+
+  final result = await showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Edit Task'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                initialValue: task.title,
+                autofocus: true,
+                onChanged: (value) => editedTitle = value,
+                decoration: const InputDecoration(
+                  hintText: 'Enter task title',
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Task title cannot be empty.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                initialValue: selectedPriority,
+                decoration: const InputDecoration(
+                  labelText: 'Priority',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 3, child: Text('High')),
+                  DropdownMenuItem(value: 2, child: Text('Medium')),
+                  DropdownMenuItem(value: 1, child: Text('Low')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setDialogState(() {
+                      selectedPriority = value;
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (!formKey.currentState!.validate()) return;
+
+              Navigator.pop(dialogContext, {
+                'title': editedTitle.trim(),
+                'priority': selectedPriority,
+              });
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  if (result == null || !mounted) return;
+
+  final title = result['title'] as String;
+  final priority = result['priority'] as int;
+  final provider = context.read<TaskProvider>();
+
+  final success = await provider.updateTask(
+    task.id,
+    title: title,
+    priority: priority,
+  );
+
+  if (!mounted) return;
+
+  if (!success) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          provider.errorMessage ?? 'Could not update task.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  setState(() {
+    final index = _additionalTasks.indexWhere(
+      (item) => item.id == task.id,
     );
 
-    if (confirmed != true) return;
+    if (index != -1) {
+      final currentTask = _additionalTasks[index];
 
-    try {
-      await _taskService.deleteTask(task.id);
-
-      if (!mounted) return;
-
-      setState(() {
-        _additionalTasks.removeWhere((item) => item.id == task.id);
-      });
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Task deleted')));
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete task. Please try again.')),
+      _additionalTasks[index] = Task(
+        id: currentTask.id,
+        title: title,
+        completed: currentTask.completed,
+        priority: priority,
       );
     }
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Task updated successfully.'),
+    ),
+  );
+}
+
+Future<void> _toggleTask(Task task, bool completed) async {
+  final provider = context.read<TaskProvider>();
+
+  final success = await provider.toggleTask(task.id, completed);
+
+  if (!mounted) return;
+
+  if (!success) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          provider.errorMessage ?? 'Could not update task.',
+        ),
+      ),
+    );
+    return;
   }
+
+  setState(() {
+    final index = _additionalTasks.indexWhere(
+      (item) => item.id == task.id,
+    );
+
+    if (index != -1) {
+      _additionalTasks[index] = Task(
+        id: task.id,
+        title: task.title,
+        completed: completed,
+        priority: task.priority,
+      );
+    }
+  });
+}
+
+Future<void> _deleteTask(Task task) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Delete Task?'),
+      content: Text('Delete "${task.title}"?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !mounted) return;
+
+  final provider = context.read<TaskProvider>();
+
+  final success = await provider.deleteTask(task.id);
+
+  if (!mounted) return;
+
+  if (!success) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          provider.errorMessage ?? 'Could not delete task.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  setState(() {
+    _additionalTasks.removeWhere(
+      (item) => item.id == task.id,
+    );
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Task deleted'),
+    ),
+  );
+}
+
 
   Future<void> _loadMoreTasks() async {
     if (_isLoadingMore || !_hasMoreTasks || _lastDocument == null) {
