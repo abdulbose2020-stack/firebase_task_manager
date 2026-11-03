@@ -1,15 +1,13 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_task_manager/providers/task_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../services/auth_service.dart';
-import '../services/task_service.dart';
-import 'dart:io';
-import 'package:image_picker/image_picker.dart';
-import '../services/user_service.dart';
 import '../services/storage_service.dart';
+import '../services/user_service.dart';
 import '../widgets/task_tile.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,38 +18,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _taskService = TaskService();
   final _authService = AuthService();
-  late Stream<QuerySnapshot<Map<String, dynamic>>> _tasksStream;
-
-  final List<Task> _additionalTasks = [];
-  bool _isLoadingMore = false;
-  bool _hasMoreTasks = true;
-  QueryDocumentSnapshot<Map<String, dynamic>>? _lastDocument;
-  File? _profileImage;
-  final ImagePicker _picker = ImagePicker();
   final _userService = UserService();
+  final _storageService = StorageService();
+  final ImagePicker _picker = ImagePicker();
+
+  File? _profileImage;
   String _displayName = '';
   String? _profileImageUrl;
-  final _storageService = StorageService();
-
-
-  bool? get _completedFilter {
-    final filter  = context.read<TaskProvider>().selectedFilter;
-    switch (filter) {
-      case 'Pending':
-        return false;
-      case 'Completed':
-        return true;
-      default:
-        return null;
-    }
-  }
 
   @override
   void initState() {
     super.initState();
-    _tasksStream = _taskService.watchFirstTaskPage(completed: _completedFilter);
     _loadProfile();
   }
 
@@ -115,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Could not save profile image. Please try again.'),
         ),
       );
@@ -141,26 +119,35 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _saveProfile(String dispalyName) async {
+  Future<void> _saveProfile(String displayName) async {
     try {
       await _userService.saveProfile(
-        displayName: dispalyName,
+        displayName: displayName,
         profileImageUrl: null,
       );
+
       if (!mounted) return;
+
+      setState(() {
+        _displayName = displayName;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile save successfully.')),
+        const SnackBar(content: Text('Profile saved successfully.')),
       );
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save profile. Please try again.')),
+        const SnackBar(
+          content: Text('Could not save profile. Please try again.'),
+        ),
       );
     }
   }
 
   Future<void> _showEditProfileDialog() async {
-    final controller = TextEditingController();
+    final controller = TextEditingController(text: _displayName);
 
     try {
       final displayName = await showDialog<String>(
@@ -184,6 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ElevatedButton(
               onPressed: () {
                 final name = controller.text.trim();
+
                 if (name.isNotEmpty) {
                   Navigator.of(dialogContext).pop(name);
                 }
@@ -207,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _sendVerificationEmail() async {
     try {
       await _authService.sendEmailVerification();
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -218,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Could not send verification email. Please try again.'),
         ),
       );
@@ -228,6 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshEmailVerification() async {
     try {
       await FirebaseAuth.instance.currentUser?.reload();
+
       if (!mounted) return;
 
       setState(() {});
@@ -245,7 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
             'Could not check verification status. Please try again.',
           ),
@@ -254,380 +244,284 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  
-Future<void> _addTask() async {
-  final formKey = GlobalKey<FormState>();
-  var enteredTitle = '';
-  var selectedPriority = 2;
-  var isSaving = false;
+  Future<void> _addTask() async {
+    final formKey = GlobalKey<FormState>();
+    var enteredTitle = '';
+    var selectedPriority = 2;
+    var isSaving = false;
 
-  final result = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Add Task'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                autofocus: true,
-                onChanged: (value) => enteredTitle = value,
-                decoration: const InputDecoration(
-                  hintText: 'Enter task title',
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Task'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  autofocus: true,
+                  onChanged: (value) => enteredTitle = value,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter task title',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a task title.';
+                    }
+
+                    return null;
+                  },
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a task title.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: selectedPriority,
-                decoration: const InputDecoration(
-                  labelText: 'Priority',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: selectedPriority,
+                  decoration: const InputDecoration(
+                    labelText: 'Priority',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 3, child: Text('High')),
+                    DropdownMenuItem(value: 2, child: Text('Medium')),
+                    DropdownMenuItem(value: 1, child: Text('Low')),
+                  ],
+                  onChanged: isSaving
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              selectedPriority = value;
+                            });
+                          }
+                        },
                 ),
-                items: const [
-                  DropdownMenuItem(value: 3, child: Text('High')),
-                  DropdownMenuItem(value: 2, child: Text('Medium')),
-                  DropdownMenuItem(value: 1, child: Text('Low')),
-                ],
-                onChanged: isSaving
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          setDialogState(() {
-                            selectedPriority = value;
-                          });
-                        }
-                      },
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: isSaving
-                ? null
-                : () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: isSaving
-                ? null
-                : () async {
-                    if (!formKey.currentState!.validate()) return;
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
 
-                    setDialogState(() => isSaving = true);
+                      setDialogState(() {
+                        isSaving = true;
+                      });
 
-                    final provider = context.read<TaskProvider>();
+                      final provider = context.read<TaskProvider>();
 
-                    final success = await provider.addTask(
-                      enteredTitle.trim(),
-                      priority: selectedPriority,
-                    );
-
-                    if (!dialogContext.mounted) return;
-
-                    if (success) {
-                      Navigator.pop(dialogContext, true);
-                    } else {
-                      setDialogState(() => isSaving = false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            provider.errorMessage ??
-                                'Could not add task.',
-                          ),
-                        ),
+                      final success = await provider.addTask(
+                        enteredTitle.trim(),
+                        priority: selectedPriority,
                       );
+
+                      if (!dialogContext.mounted) return;
+
+                      if (success) {
+                        Navigator.pop(dialogContext, true);
+                      } else {
+                        setDialogState(() {
+                          isSaving = false;
+                        });
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              provider.errorMessage ?? 'Could not add task.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              child: isSaving
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != true || !mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task added successfully.')));
+  }
+
+  Future<void> _editTask(Task task) async {
+    final formKey = GlobalKey<FormState>();
+    var editedTitle = task.title;
+    var selectedPriority = task.priority;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Task'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  initialValue: task.title,
+                  autofocus: true,
+                  onChanged: (value) => editedTitle = value,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter task title',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Task title cannot be empty.';
+                    }
+
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: selectedPriority,
+                  decoration: const InputDecoration(
+                    labelText: 'Priority',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 3, child: Text('High')),
+                    DropdownMenuItem(value: 2, child: Text('Medium')),
+                    DropdownMenuItem(value: 1, child: Text('Low')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() {
+                        selectedPriority = value;
+                      });
                     }
                   },
-            child: isSaving
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Text('Add'),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  if (result != true || !mounted) return;
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('Task added successfully.'),
-    ),
-  );
-}
-
-
-Future<void> _editTask(Task task) async {
-  final formKey = GlobalKey<FormState>();
-  var editedTitle = task.title;
-  var selectedPriority = task.priority;
-
-  final result = await showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Edit Task'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                initialValue: task.title,
-                autofocus: true,
-                onChanged: (value) => editedTitle = value,
-                decoration: const InputDecoration(
-                  hintText: 'Enter task title',
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Task title cannot be empty.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: selectedPriority,
-                decoration: const InputDecoration(
-                  labelText: 'Priority',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 3, child: Text('High')),
-                  DropdownMenuItem(value: 2, child: Text('Medium')),
-                  DropdownMenuItem(value: 1, child: Text('Low')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setDialogState(() {
-                      selectedPriority = value;
-                    });
-                  }
-                },
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (!formKey.currentState!.validate()) return;
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (!formKey.currentState!.validate()) return;
 
-              Navigator.pop(dialogContext, {
-                'title': editedTitle.trim(),
-                'priority': selectedPriority,
-              });
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  if (result == null || !mounted) return;
-
-  final title = result['title'] as String;
-  final priority = result['priority'] as int;
-  final provider = context.read<TaskProvider>();
-
-  final success = await provider.updateTask(
-    task.id,
-    title: title,
-    priority: priority,
-  );
-
-  if (!mounted) return;
-
-  if (!success) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          provider.errorMessage ?? 'Could not update task.',
+                Navigator.pop(dialogContext, {
+                  'title': editedTitle.trim(),
+                  'priority': selectedPriority,
+                });
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
       ),
     );
-    return;
-  }
 
-  setState(() {
-    final index = _additionalTasks.indexWhere(
-      (item) => item.id == task.id,
+    if (result == null || !mounted) return;
+
+    final title = result['title'] as String;
+    final priority = result['priority'] as int;
+    final provider = context.read<TaskProvider>();
+
+    final success = await provider.updateTask(
+      task.id,
+      title: title,
+      priority: priority,
     );
 
-    if (index != -1) {
-      final currentTask = _additionalTasks[index];
+    if (!mounted) return;
 
-      _additionalTasks[index] = Task(
-        id: currentTask.id,
-        title: title,
-        completed: currentTask.completed,
-        priority: priority,
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.errorMessage ?? 'Could not update task.'),
+        ),
       );
-    }
-  });
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('Task updated successfully.'),
-    ),
-  );
-}
-
-Future<void> _toggleTask(Task task, bool completed) async {
-  final provider = context.read<TaskProvider>();
-
-  final success = await provider.toggleTask(task.id, completed);
-
-  if (!mounted) return;
-
-  if (!success) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          provider.errorMessage ?? 'Could not update task.',
-        ),
-      ),
-    );
-    return;
-  }
-
-  setState(() {
-    final index = _additionalTasks.indexWhere(
-      (item) => item.id == task.id,
-    );
-
-    if (index != -1) {
-      _additionalTasks[index] = Task(
-        id: task.id,
-        title: task.title,
-        completed: completed,
-        priority: task.priority,
-      );
-    }
-  });
-}
-
-Future<void> _deleteTask(Task task) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Delete Task?'),
-      content: Text('Delete "${task.title}"?'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
-  );
-
-  if (confirmed != true || !mounted) return;
-
-  final provider = context.read<TaskProvider>();
-
-  final success = await provider.deleteTask(task.id);
-
-  if (!mounted) return;
-
-  if (!success) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          provider.errorMessage ?? 'Could not delete task.',
-        ),
-      ),
-    );
-    return;
-  }
-
-  setState(() {
-    _additionalTasks.removeWhere(
-      (item) => item.id == task.id,
-    );
-  });
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('Task deleted'),
-    ),
-  );
-}
-
-
-  Future<void> _loadMoreTasks() async {
-    if (_isLoadingMore || !_hasMoreTasks || _lastDocument == null) {
       return;
     }
 
-    setState(() {
-      _isLoadingMore = true;
-    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task updated successfully.')));
+  }
 
-    try {
-      final snapshot = await _taskService.getNextTaskPage(
-        _lastDocument!,
-        completed: _completedFilter,
-      );
-      if (!mounted) return;
+  Future<void> _toggleTask(Task task, bool completed) async {
+    final provider = context.read<TaskProvider>();
 
-      setState(() {
-        if (snapshot.docs.isNotEmpty) {
-          final existingIds = _additionalTasks.map((task) => task.id).toSet();
+    final success = await provider.toggleTask(task.id, completed);
 
-          for (final doc in snapshot.docs) {
-            if (existingIds.add(doc.id)) {
-              _additionalTasks.add(Task.fromMap(doc.data(), doc.id));
-            }
-          }
+    if (!mounted) return;
 
-          _lastDocument = snapshot.docs.last;
-        }
-
-        _hasMoreTasks = snapshot.docs.length == 10;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load more tasks. Please try again.')),
+        SnackBar(
+          content: Text(provider.errorMessage ?? 'Could not update task.'),
+        ),
       );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingMore = false;
-        });
-      }
     }
   }
 
-  Widget _buildLoadMoreButton() {
-    if (_isLoadingMore) {
+  Future<void> _deleteTask(Task task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Task?'),
+        content: Text('Delete "${task.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final provider = context.read<TaskProvider>();
+
+    final success = await provider.deleteTask(task.id);
+
+    if (!mounted) return;
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.errorMessage ?? 'Could not delete task.'),
+        ),
+      );
+
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task deleted.')));
+  }
+
+  Widget _buildLoadMoreButton(TaskProvider provider) {
+    if (provider.isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.all(16),
         child: Center(child: CircularProgressIndicator()),
@@ -638,7 +532,7 @@ Future<void> _deleteTask(Task task) async {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: TextButton(
-          onPressed: _hasMoreTasks ? _loadMoreTasks : null,
+          onPressed: provider.hasMoreTasks ? provider.loadMoreTasks : null,
           child: const Text('Load More Tasks'),
         ),
       ),
@@ -647,7 +541,9 @@ Future<void> _deleteTask(Task task) async {
 
   @override
   Widget build(BuildContext context) {
-    final selectedFilter = context.watch<TaskProvider>().selectedFilter;
+    final provider = context.watch<TaskProvider>();
+    final selectedFilter = provider.selectedFilter;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName'),
@@ -668,13 +564,11 @@ Future<void> _deleteTask(Task task) async {
                   : null,
             ),
           ),
-
           IconButton(
             onPressed: _showEditProfileDialog,
             tooltip: 'Edit profile',
             icon: const Icon(Icons.edit),
           ),
-
           IconButton(
             onPressed: _logout,
             tooltip: 'Log out',
@@ -698,7 +592,8 @@ Future<void> _deleteTask(Task task) async {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Check your inbox for the verification link. If you cannot find it, check your spam folder.',
+                      'Check your inbox for the verification link. '
+                      'If you cannot find it, check your spam folder.',
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -730,31 +625,20 @@ Future<void> _deleteTask(Task task) async {
                   selected: selectedFilter == filter,
                   showCheckmark: false,
                   onSelected: (_) {
-                    context.read<TaskProvider>().changeFilter(filter);
-
-                    setState(() {
-                      _tasksStream = _taskService.watchFirstTaskPage(
-                        completed: filter == 'Pending'
-                            ? false
-                            : filter == 'Completed'
-                                ? true
-                                : null,
-                      );
-                      _additionalTasks.clear();
-                      _lastDocument = null;
-                      _isLoadingMore = false;
-                      _hasMoreTasks = true;
-                    });
+                    provider.changeFilter(filter);
                   },
                 );
               }).toList(),
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _tasksStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
+            child: Builder(
+              builder: (context) {
+                if (provider.isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (provider.hasStreamError) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -762,16 +646,7 @@ Future<void> _deleteTask(Task task) async {
                         const Text('Something went wrong loading tasks.'),
                         const SizedBox(height: 12),
                         ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _tasksStream = _taskService.watchFirstTaskPage(
-                                completed: _completedFilter,
-                              );
-                              _additionalTasks.clear();
-                              _lastDocument = null;
-                              _hasMoreTasks = true;
-                            });
-                          },
+                          onPressed: provider.retryTasksStream,
                           child: const Text('Retry'),
                         ),
                       ],
@@ -779,41 +654,12 @@ Future<void> _deleteTask(Task task) async {
                   );
                 }
 
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData) {
-                  return const Center(child: Text('No tasks available.'));
-                }
-
-                final documents = snapshot.data!.docs;
-
-                // Set the pagination cursor from the first page.
-                if (_additionalTasks.isEmpty) {
-                  _lastDocument = documents.isEmpty ? null : documents.last;
-                  _hasMoreTasks = documents.length == 10;
-                }
-
-                final firstPageTasks = documents.map(
-                  (doc) => Task.fromMap(doc.data(), doc.id),
-                );
-
-                // Merge pages while avoiding duplicate task IDs.
-                final uniqueTasks = <String, Task>{};
-
-                for (final task in [...firstPageTasks, ..._additionalTasks]) {
-                  uniqueTasks[task.id] = task;
-                }
-
-                final allTasks = uniqueTasks.values.toList();
-
-                final tasks = allTasks;
+                final tasks = provider.tasks;
 
                 if (tasks.isEmpty) {
                   final message = switch (selectedFilter) {
-                    'Pending' => 'No pending tasks on loaded pages.',
-                    'Completed' => 'No completed tasks on loaded pages.',
+                    'Pending' => 'No pending tasks.',
+                    'Completed' => 'No completed tasks.',
                     _ => 'No tasks yet. Tap + to add one!',
                   };
 
@@ -821,16 +667,16 @@ Future<void> _deleteTask(Task task) async {
                     children: [
                       const SizedBox(height: 80),
                       Center(child: Text(message)),
-                      if (_hasMoreTasks) _buildLoadMoreButton(),
+                      if (provider.hasMoreTasks) _buildLoadMoreButton(provider),
                     ],
                   );
                 }
 
                 return ListView.builder(
-                  itemCount: tasks.length + (_hasMoreTasks ? 1 : 0),
+                  itemCount: tasks.length + (provider.hasMoreTasks ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == tasks.length) {
-                      return _buildLoadMoreButton();
+                      return _buildLoadMoreButton(provider);
                     }
 
                     final task = tasks[index];
