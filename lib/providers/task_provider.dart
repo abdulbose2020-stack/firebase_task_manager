@@ -119,6 +119,7 @@ class TaskProvider extends ChangeNotifier {
     _lastDocument = null;
     _hasMoreTasks = true;
     _isLoading = true;
+    _isLoadingMore = false;
     _hasStreamError = false;
     _errorMessage = null;
     _notify();
