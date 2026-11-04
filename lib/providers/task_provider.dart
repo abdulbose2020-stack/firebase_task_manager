@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/task.dart';
-import '../services/task_service.dart';
+import '../repositories/task_repository.dart';
 
 class TaskProvider extends ChangeNotifier {
-  final TaskService _taskService;
+  final TaskRepository _taskRepository;
 
   StreamSubscription<User?>? _authSubscription;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _tasksSubscription;
+  StreamSubscription<TaskPage>? _tasksSubscription;
 
   int _streamGeneration = 0;
   bool _disposed = false;
@@ -31,14 +30,14 @@ class TaskProvider extends ChangeNotifier {
   }
 
   Task? getTaskById(String id) {
-  for (final task in tasks) {
-    if (task.id == id) {
-      return task;
+    for (final task in tasks) {
+      if (task.id == id) {
+        return task;
+      }
     }
-  }
 
-  return null;
-}
+    return null;
+  }
 
   bool _isLoading = true;
   bool get isLoading => _isLoading;
@@ -64,7 +63,7 @@ class TaskProvider extends ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  QueryDocumentSnapshot<Map<String, dynamic>>? _lastDocument;
+  TaskPageCursor? _lastCursor;
 
   bool? get _completedFilter {
     switch (_selectedFilter) {
@@ -77,7 +76,7 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  TaskProvider({required this._taskService}) {
+  TaskProvider({required this._taskRepository}) {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
       _handleAuthChange,
       onError: (Object error) {
@@ -96,7 +95,7 @@ class TaskProvider extends ChangeNotifier {
       _cancelTasksSubscription();
       _firstPageTasks.clear();
       _additionalTasks.clear();
-      _lastDocument = null;
+      _lastCursor = null;
       _hasMoreTasks = false;
       _isLoading = false;
       _hasStreamError = false;
@@ -110,6 +109,7 @@ class TaskProvider extends ChangeNotifier {
 
   void _cancelTasksSubscription() {
     _streamGeneration++;
+
     final subscription = _tasksSubscription;
     _tasksSubscription = null;
 
@@ -126,7 +126,7 @@ class TaskProvider extends ChangeNotifier {
 
     _firstPageTasks.clear();
     _additionalTasks.clear();
-    _lastDocument = null;
+    _lastCursor = null;
     _hasMoreTasks = true;
     _isLoading = true;
     _isLoadingMore = false;
@@ -134,37 +134,35 @@ class TaskProvider extends ChangeNotifier {
     _errorMessage = null;
     _notify();
 
-    _tasksSubscription = _taskService
+    _tasksSubscription = _taskRepository
         .watchFirstTaskPage(completed: _completedFilter)
         .listen(
-          (snapshot) {
-            if (_disposed || generation != _streamGeneration) return;
+      (page) {
+        if (_disposed || generation != _streamGeneration) return;
 
-            _firstPageTasks
-              ..clear()
-              ..addAll(
-                snapshot.docs.map((doc) => Task.fromMap(doc.data(), doc.id)),
-              );
+        _firstPageTasks
+          ..clear()
+          ..addAll(page.tasks);
 
-            if (_additionalTasks.isEmpty) {
-              _lastDocument = snapshot.docs.isEmpty ? null : snapshot.docs.last;
+        if (_additionalTasks.isEmpty) {
+          _lastCursor = page.cursor;
+          _hasMoreTasks = page.hasMore;
+        }
 
-              _hasMoreTasks = snapshot.docs.length == 10;
-            }
-            _isLoading = false;
-            _hasStreamError = false;
-            _errorMessage = null;
-            _notify();
-          },
-          onError: (Object error) {
-            if (_disposed || generation != _streamGeneration) return;
+        _isLoading = false;
+        _hasStreamError = false;
+        _errorMessage = null;
+        _notify();
+      },
+      onError: (Object error) {
+        if (_disposed || generation != _streamGeneration) return;
 
-            _isLoading = false;
-            _hasStreamError = true;
-            _errorMessage = 'Something went wrong loading tasks.';
-            _notify();
-          },
-        );
+        _isLoading = false;
+        _hasStreamError = true;
+        _errorMessage = 'Something went wrong loading tasks.';
+        _notify();
+      },
+    );
   }
 
   void changeFilter(String filter) {
@@ -181,7 +179,7 @@ class TaskProvider extends ChangeNotifier {
   Future<void> loadMoreTasks() async {
     if (_isLoadingMore ||
         !_hasMoreTasks ||
-        _lastDocument == null ||
+        _lastCursor == null ||
         FirebaseAuth.instance.currentUser == null) {
       return;
     }
@@ -190,8 +188,8 @@ class TaskProvider extends ChangeNotifier {
     _notify();
 
     try {
-      final snapshot = await _taskService.getNextTaskPage(
-        _lastDocument!,
+      final page = await _taskRepository.getNextTaskPage(
+        _lastCursor!,
         completed: _completedFilter,
       );
 
@@ -199,20 +197,18 @@ class TaskProvider extends ChangeNotifier {
 
       final existingIds = tasks.map((task) => task.id).toSet();
 
-      for (final doc in snapshot.docs) {
-        if (existingIds.add(doc.id)) {
-          _additionalTasks.add(Task.fromMap(doc.data(), doc.id));
+      for (final task in page.tasks) {
+        if (existingIds.add(task.id)) {
+          _additionalTasks.add(task);
         }
       }
 
-      if (snapshot.docs.isNotEmpty) {
-        _lastDocument = snapshot.docs.last;
-      }
-
-      _hasMoreTasks = snapshot.docs.length == 10;
+      _lastCursor = page.cursor;
+      _hasMoreTasks = page.hasMore;
       _errorMessage = null;
     } catch (e) {
       if (_disposed) return;
+
       _errorMessage = 'Could not load more tasks. Please try again.';
     } finally {
       if (!_disposed) {
@@ -222,7 +218,10 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> addTask(String title, {required int priority}) async {
+  Future<bool> addTask(
+    String title, {
+    required int priority,
+  }) async {
     if (_isAddingTask) return false;
 
     _isAddingTask = true;
@@ -230,7 +229,10 @@ class TaskProvider extends ChangeNotifier {
     _notify();
 
     try {
-      await _taskService.addTask(title, priority: priority);
+      await _taskRepository.addTask(
+        title,
+        priority: priority,
+      );
       return true;
     } catch (e) {
       _errorMessage = 'Could not add task. Please try again.';
@@ -254,7 +256,7 @@ class TaskProvider extends ChangeNotifier {
     _notify();
 
     try {
-      await _taskService.updateTask(
+      await _taskRepository.updateTask(
         id,
         title: title,
         completed: completed,
@@ -304,7 +306,7 @@ class TaskProvider extends ChangeNotifier {
     _notify();
 
     try {
-      await _taskService.deleteTask(id);
+      await _taskRepository.deleteTask(id);
       _removeTask(id);
       return true;
     } catch (e) {
