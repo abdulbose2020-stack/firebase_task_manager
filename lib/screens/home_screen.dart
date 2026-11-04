@@ -18,6 +18,11 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const Color _navy = Color(0xFF172B4D);
+  static const Color _background = Color(0xFFF5F7FB);
+  static const Color _amber = Color(0xFFFFF0D5);
+  static const Color _green = Color(0xFFE1F4E9);
+
   final _authService = AuthService();
   final _userService = UserService();
   final _storageService = StorageService();
@@ -270,7 +275,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter a task title.';
                     }
-
                     return null;
                   },
                 ),
@@ -354,9 +358,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result != true || !mounted) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Task added successfully.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Task added successfully.')),
+    );
   }
 
   Future<void> _editTask(Task task) async {
@@ -385,7 +389,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Task title cannot be empty.';
                     }
-
                     return null;
                   },
                 ),
@@ -453,17 +456,15 @@ class _HomeScreenState extends State<HomeScreen> {
           content: Text(provider.errorMessage ?? 'Could not update task.'),
         ),
       );
-
       return;
     }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Task updated successfully.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Task updated successfully.')),
+    );
   }
 
   Future<void> _toggleTask(Task task, bool completed) async {
-
     final provider = context.read<TaskProvider>();
 
     final success = await provider.toggleTask(task.id, completed);
@@ -512,130 +513,279 @@ class _HomeScreenState extends State<HomeScreen> {
           content: Text(provider.errorMessage ?? 'Could not delete task.'),
         ),
       );
-
       return;
     }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Task deleted.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Task deleted.')),
+    );
   }
 
   Widget _buildLoadMoreButton(TaskProvider provider) {
     if (provider.isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.all(16),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(
+          child: CircularProgressIndicator(color: _navy),
+        ),
       );
     }
 
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: TextButton(
+        child: TextButton.icon(
           onPressed: provider.hasMoreTasks ? provider.loadMoreTasks : null,
-          child: const Text('Load More Tasks'),
+          icon: const Icon(Icons.expand_more),
+          label: const Text('Load More Tasks'),
+          style: TextButton.styleFrom(
+            foregroundColor: _navy,
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildVerificationNotice() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _amber,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFFD58A)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.mark_email_unread_outlined, color: Color(0xFF9A6200)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Verify your email address',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF754900),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Check your inbox for the verification link. '
+            'If you cannot find it, check your spam folder.',
+            style: TextStyle(color: Color(0xFF754900)),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton(
+                onPressed: _sendVerificationEmail,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _navy,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Send verification email'),
+              ),
+              TextButton(
+                onPressed: _refreshEmailVerification,
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF754900),
+                ),
+                child: const Text("I've verified"),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(TaskProvider provider) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE8ECF2)),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 5,
+        runSpacing: 5,
+        children: ['All', 'Pending', 'Completed'].map((filter) {
+          final isSelected = provider.selectedFilter == filter;
+
+          final selectedColor = switch (filter) {
+            'Pending' => const Color(0xFFFFE5B5),
+            'Completed' => _green,
+            _ => _navy,
+          };
+
+          final selectedTextColor = switch (filter) {
+            'Pending' => const Color(0xFF855000),
+            'Completed' => const Color(0xFF176B3A),
+            _ => Colors.white,
+          };
+
+          return ChoiceChip(
+            label: Text(filter),
+            selected: isSelected,
+            showCheckmark: false,
+            onSelected: (_) => provider.changeFilter(filter),
+            backgroundColor: Colors.white,
+            selectedColor: selectedColor,
+            side: BorderSide(
+              color: isSelected ? selectedColor : Colors.transparent,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(13),
+            ),
+            labelStyle: TextStyle(
+              color: isSelected ? selectedTextColor : const Color(0xFF647084),
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 75, 24, 24),
+      children: [
+        Icon(
+          Icons.task_alt_rounded,
+          size: 68,
+          color: _navy.withValues(alpha: 0.25),
+        ),
+        const SizedBox(height: 18),
+        Center(
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF647084),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _background,
       appBar: AppBar(
-        title: Text(_displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName'),
+        backgroundColor: _navy,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 72,
+        centerTitle: false,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 3),
+            const Text(
+              'Stay focused. Get things done.',
+              style: TextStyle(
+                fontSize: 11,
+                color: Color(0xFFD6DFED),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             onPressed: _pickProfileImage,
             tooltip: 'Choose profile image',
-            icon: CircleAvatar(
-              backgroundImage: _profileImage != null
-                  ? FileImage(_profileImage!)
-                  : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
-                  ? NetworkImage(_profileImageUrl!)
-                  : null,
-              child:
-                  _profileImage == null &&
-                      (_profileImageUrl == null || _profileImageUrl!.isEmpty)
-                  ? const Icon(Icons.person)
-                  : null,
+            icon: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  width: 1.5,
+                ),
+                color: Colors.white.withValues(alpha: 0.15),
+              ),
+              child: CircleAvatar(
+                backgroundColor: Colors.transparent,
+                backgroundImage: _profileImage != null
+                    ? FileImage(_profileImage!)
+                    : (_profileImageUrl != null &&
+                          _profileImageUrl!.isNotEmpty)
+                    ? NetworkImage(_profileImageUrl!)
+                    : null,
+                child:
+                    _profileImage == null &&
+                        (_profileImageUrl == null ||
+                            _profileImageUrl!.isEmpty)
+                    ? const Icon(Icons.person, color: Colors.white, size: 22)
+                    : null,
+              ),
             ),
           ),
           IconButton(
             onPressed: _showEditProfileDialog,
             tooltip: 'Edit profile',
-            icon: const Icon(Icons.edit),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.13),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.edit_outlined, size: 21),
           ),
           IconButton(
             onPressed: _logout,
             tooltip: 'Log out',
-            icon: const Icon(Icons.logout),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.13),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.logout_rounded, size: 21),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
-          if (!_authService.isEmailVerified)
-            Card(
-              margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Please verify your email address.',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Check your inbox for the verification link. '
-                      'If you cannot find it, check your spam folder.',
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        ElevatedButton(
-                          onPressed: _sendVerificationEmail,
-                          child: const Text('Send verification email'),
-                        ),
-                        TextButton(
-                          onPressed: _refreshEmailVerification,
-                          child: const Text("I've verified"),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          if (!_authService.isEmailVerified) _buildVerificationNotice(),
           Consumer<TaskProvider>(
             builder: (context, provider, child) {
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  children: ['All', 'Pending', 'Completed'].map((filter) {
-                    return ChoiceChip(
-                      label: Text(filter),
-                      selected: provider.selectedFilter == filter,
-                      showCheckmark: false,
-                      onSelected: (_) => provider.changeFilter(filter),
-                    );
-                  }).toList(),
-                ),
-              );
+              return _buildFilterBar(provider);
             },
           ),
           Expanded(
             child: Consumer<TaskProvider>(
               builder: (context, provider, child) {
                 if (provider.isLoading) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: CircularProgressIndicator(color: _navy),
+                  );
                 }
 
                 if (provider.hasStreamError) {
@@ -643,10 +793,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        const Icon(
+                          Icons.cloud_off_outlined,
+                          size: 48,
+                          color: Color(0xFF9AA4B2),
+                        ),
+                        const SizedBox(height: 12),
                         const Text('Something went wrong loading tasks.'),
                         const SizedBox(height: 12),
                         ElevatedButton(
                           onPressed: provider.retryTasksStream,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _navy,
+                            foregroundColor: Colors.white,
+                          ),
                           child: const Text('Retry'),
                         ),
                       ],
@@ -663,16 +823,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     _ => 'No tasks yet. Tap + to add one!',
                   };
 
-                  return ListView(
+                  return Column(
                     children: [
-                      const SizedBox(height: 80),
-                      Center(child: Text(message)),
-                      if (provider.hasMoreTasks) _buildLoadMoreButton(provider),
+                      Expanded(child: _buildEmptyState(message)),
+                      if (provider.hasMoreTasks)
+                        _buildLoadMoreButton(provider),
                     ],
                   );
                 }
 
                 return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
                   itemCount: tasks.length + (provider.hasMoreTasks ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == tasks.length) {
@@ -699,7 +860,13 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: _addTask,
         tooltip: 'Add task',
-        child: const Icon(Icons.add),
+        backgroundColor: _navy,
+        foregroundColor: Colors.white,
+        elevation: 5,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(17),
+        ),
+        child: const Icon(Icons.add, size: 29),
       ),
     );
   }
