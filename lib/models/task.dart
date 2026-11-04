@@ -19,4 +19,16 @@ class Task {
       priority: map['priority'] as int? ?? 1,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Task &&
+          id == other.id &&
+          title == other.title &&
+          completed == other.completed &&
+          priority == other.priority;
+
+  @override
+  int get hashCode => Object.hash(id, title, completed, priority);
 }

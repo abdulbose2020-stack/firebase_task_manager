@@ -6,7 +6,7 @@ import '../models/task.dart';
 import '../services/task_service.dart';
 
 class TaskProvider extends ChangeNotifier {
-  final TaskService _taskService = TaskService();
+  final TaskService _taskService;
 
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _tasksSubscription;
@@ -29,6 +29,16 @@ class TaskProvider extends ChangeNotifier {
 
     return uniqueTasks.values.toList();
   }
+
+  Task? getTaskById(String id) {
+  for (final task in tasks) {
+    if (task.id == id) {
+      return task;
+    }
+  }
+
+  return null;
+}
 
   bool _isLoading = true;
   bool get isLoading => _isLoading;
@@ -67,7 +77,7 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  TaskProvider() {
+  TaskProvider({required this._taskService}) {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
       _handleAuthChange,
       onError: (Object error) {

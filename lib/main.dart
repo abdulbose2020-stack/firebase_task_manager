@@ -9,6 +9,7 @@ import 'screens/auth_wrapper.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:provider/provider.dart';
 import 'providers/task_provider.dart';
+import 'services/task_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,11 +19,7 @@ void main() async {
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(
-      error,
-      stack,
-      fatal: true,
-      );
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
 
@@ -38,8 +35,15 @@ void main() async {
   //}
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => TaskProvider(),
+    MultiProvider(
+      providers: [
+        Provider<TaskService>(create: (_) => TaskService()),
+        ChangeNotifierProvider<TaskProvider>(
+          create: (context) => TaskProvider(
+            taskService: context.read<TaskService>()
+          ),
+        ),
+      ],
       child: const MyApp(),
     ),
   );

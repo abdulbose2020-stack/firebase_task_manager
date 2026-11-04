@@ -463,6 +463,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _toggleTask(Task task, bool completed) async {
+
     final provider = context.read<TaskProvider>();
 
     final success = await provider.toggleTask(task.id, completed);
@@ -541,9 +542,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<TaskProvider>();
-    final selectedFilter = provider.selectedFilter;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(_displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName'),
@@ -614,26 +612,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              children: ['All', 'Pending', 'Completed'].map((filter) {
-                return ChoiceChip(
-                  label: Text(filter),
-                  selected: selectedFilter == filter,
-                  showCheckmark: false,
-                  onSelected: (_) {
-                    provider.changeFilter(filter);
-                  },
-                );
-              }).toList(),
-            ),
+          Consumer<TaskProvider>(
+            builder: (context, provider, child) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  children: ['All', 'Pending', 'Completed'].map((filter) {
+                    return ChoiceChip(
+                      label: Text(filter),
+                      selected: provider.selectedFilter == filter,
+                      showCheckmark: false,
+                      onSelected: (_) => provider.changeFilter(filter),
+                    );
+                  }).toList(),
+                ),
+              );
+            },
           ),
           Expanded(
-            child: Builder(
-              builder: (context) {
+            child: Consumer<TaskProvider>(
+              builder: (context, provider, child) {
                 if (provider.isLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -657,7 +657,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final tasks = provider.tasks;
 
                 if (tasks.isEmpty) {
-                  final message = switch (selectedFilter) {
+                  final message = switch (provider.selectedFilter) {
                     'Pending' => 'No pending tasks.',
                     'Completed' => 'No completed tasks.',
                     _ => 'No tasks yet. Tap + to add one!',
@@ -682,7 +682,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     final task = tasks[index];
 
                     return TaskTile(
-                      task: task,
+                      key: ValueKey(task.id),
+                      taskId: task.id,
                       priorityLabel: _priorityLabel(task.priority),
                       onToggle: (value) => _toggleTask(task, value),
                       onEdit: () => _editTask(task),
