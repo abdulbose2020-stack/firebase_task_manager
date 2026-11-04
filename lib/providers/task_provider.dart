@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -7,7 +8,11 @@ import '../repositories/task_repository.dart';
 class TaskProvider extends ChangeNotifier {
   final TaskRepository _taskRepository;
 
-  StreamSubscription<User?>? _authSubscription;
+  // Injectable authentication dependencies for unit testing.
+  final Stream<bool> _authenticationChanges;
+  final bool Function() _isAuthenticated;
+
+  StreamSubscription<bool>? _authSubscription;
   StreamSubscription<TaskPage>? _tasksSubscription;
 
   int _streamGeneration = 0;
@@ -76,8 +81,17 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  TaskProvider({required this._taskRepository}) {
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+  TaskProvider({
+    required this._taskRepository,
+    Stream<bool>? authenticationChanges,
+    bool Function()? isAuthenticated,
+  })  : _authenticationChanges = authenticationChanges ??
+            FirebaseAuth.instance.authStateChanges().map(
+                  (user) => user != null,
+                ),
+        _isAuthenticated = isAuthenticated ??
+            (() => FirebaseAuth.instance.currentUser != null) {
+    _authSubscription = _authenticationChanges.listen(
       _handleAuthChange,
       onError: (Object error) {
         _hasStreamError = true;
@@ -88,10 +102,10 @@ class TaskProvider extends ChangeNotifier {
     );
   }
 
-  void _handleAuthChange(User? user) {
+  void _handleAuthChange(bool isAuthenticated) {
     if (_disposed) return;
 
-    if (user == null) {
+    if (!isAuthenticated) {
       _cancelTasksSubscription();
       _firstPageTasks.clear();
       _additionalTasks.clear();
@@ -119,7 +133,7 @@ class TaskProvider extends ChangeNotifier {
   }
 
   void _startTasksStream() {
-    if (_disposed || FirebaseAuth.instance.currentUser == null) return;
+    if (_disposed || !_isAuthenticated()) return;
 
     _cancelTasksSubscription();
     final generation = _streamGeneration;
@@ -180,7 +194,7 @@ class TaskProvider extends ChangeNotifier {
     if (_isLoadingMore ||
         !_hasMoreTasks ||
         _lastCursor == null ||
-        FirebaseAuth.instance.currentUser == null) {
+        !_isAuthenticated()) {
       return;
     }
 
