@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/auth_service.dart';
 import 'package:flutter/services.dart';
+import '../services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -13,6 +13,8 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  final _fullNameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -40,6 +42,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _authService.register(
         _emailController.text.trim(),
         _passwordController.text,
+        fullName: _fullNameController.text.trim(),
+        username: _usernameController.text.trim().toLowerCase(),
       );
 
       if (!mounted) return;
@@ -73,6 +77,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       case 'email-already-in-use':
         return 'This email is already registered. Please log in.';
+
+      case 'username-already-in-use':
+        return 'This username is already taken. Please choose another.';
 
       case 'weak-password':
         return 'Choose a stronger password.';
@@ -113,24 +120,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     children: [
                       _buildHeader(),
-
                       Transform.translate(
                         offset: const Offset(0, -25),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 22),
                           child: _buildRegisterCard(),
-                        ),
-                      ),
-
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child: Text(
-                          'Start organizing your tasks today.',
-                          style: TextStyle(
-                            color: muted,
-                            fontSize: 12,
-                            letterSpacing: 0.3,
-                          ),
                         ),
                       ),
                     ],
@@ -190,9 +184,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 30),
-
           const Text(
             'Create Account',
             style: TextStyle(
@@ -201,17 +193,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-
           const SizedBox(height: 9),
-
           Text(
-            'Join us and take control of your daily tasks.',
+            'Start organizing your tasks today.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.75),
               fontSize: 14,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: navy,
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
       ),
     );
   }
@@ -246,27 +247,77 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-
               const SizedBox(height: 7),
-
               const Text(
                 'Create your account using the details below.',
                 style: TextStyle(color: muted, fontSize: 13),
               ),
-
               const SizedBox(height: 26),
 
-              const Text(
-                'Email Address',
-                style: TextStyle(
-                  color: navy,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
+              _buildLabel('Full Name'),
+              const SizedBox(height: 9),
+              TextFormField(
+                controller: _fullNameController,
+                textCapitalization: TextCapitalization.words,
+                keyboardType: TextInputType.name,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.name],
+                decoration: const InputDecoration(
+                  hintText: 'Enter your full name',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
                 ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter your full name.';
+                  }
+
+                  if (value.trim().length < 2) {
+                    return 'Please enter a valid name.';
+                  }
+
+                  return null;
+                },
               ),
 
-              const SizedBox(height: 9),
+              const SizedBox(height: 20),
 
+              _buildLabel('Username'),
+              const SizedBox(height: 9),
+              TextFormField(
+                controller: _usernameController,
+                textCapitalization: TextCapitalization.none,
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.nickname],
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                    RegExp(r'[a-zA-Z0-9_]'),
+                  ),
+                  LengthLimitingTextInputFormatter(20),
+                ],
+                decoration: const InputDecoration(
+                  hintText: 'Choose a username',
+                  prefixIcon: Icon(Icons.alternate_email_rounded),
+                ),
+                validator: (value) {
+                  final username = value?.trim() ?? '';
+
+                  if (username.isEmpty) {
+                    return 'Please choose a username.';
+                  }
+
+                  if (!RegExp(r'^[a-zA-Z0-9_]{3,20}$').hasMatch(username)) {
+                    return 'Use 3–20 letters, numbers or underscores.';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 20),
+
+              _buildLabel('Email Address'),
+              const SizedBox(height: 9),
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
@@ -293,17 +344,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 20),
 
-              const Text(
-                'Password',
-                style: TextStyle(
-                  color: navy,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-
+              _buildLabel('Password'),
               const SizedBox(height: 9),
-
               TextFormField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
@@ -343,17 +385,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 20),
 
-              const Text(
-                'Confirm Password',
-                style: TextStyle(
-                  color: navy,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-
+              _buildLabel('Confirm Password'),
               const SizedBox(height: 9),
-
               TextFormField(
                 controller: _confirmPasswordController,
                 obscureText: _obscureConfirmPassword,
@@ -462,6 +495,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
+    _fullNameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();

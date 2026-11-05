@@ -11,7 +11,9 @@ import '../services/user_service.dart';
 import '../widgets/task_tile.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Map<String, dynamic> initialProfile;
+
+  const HomeScreen({super.key, this.initialProfile = const {}});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -30,12 +32,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   File? _profileImage;
   String _displayName = '';
+  String _username = '';
   String? _profileImageUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+
+    _displayName = widget.initialProfile['displayName'] as String? ?? '';
+
+    _username = widget.initialProfile['username'] as String? ?? '';
+
+    _profileImageUrl = widget.initialProfile['profileImageUrl'] as String?;
   }
 
   String _priorityLabel(int priority) {
@@ -50,6 +58,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm logout'),
+        content: const Text('Do you want to logout?'),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('No'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Yes'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
     try {
       await _authService.logout();
     } catch (e) {
@@ -105,43 +142,46 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadProfile() async {
+  Future<void> _saveProfile(String displayName, String username) async {
+    final oldDisplayName = _displayName;
+    final oldUsername = _username;
+
+    final newUsername = username.trim().toLowerCase();
+
+    // Update the screen immediately.
+    setState(() {
+      _displayName = displayName;
+      _username = newUsername;
+    });
+
     try {
-      final snapshot = await _userService.getProfile();
+      await _userService.updateUsername(newUsername);
 
-      if (!mounted || !snapshot.exists) return;
-
-      final data = snapshot.data();
-
-      if (data != null) {
-        setState(() {
-          _displayName = data['displayName'] as String? ?? '';
-          _profileImageUrl = data['profileImageUrl'] as String?;
-        });
-      }
-    } catch (e) {
-      debugPrint('Could not load profile: $e');
-    }
-  }
-
-  Future<void> _saveProfile(String displayName) async {
-    try {
-      await _userService.saveProfile(
-        displayName: displayName,
-        profileImageUrl: null,
-      );
+      await _userService.saveProfile(displayName: displayName);
 
       if (!mounted) return;
-
-      setState(() {
-        _displayName = displayName;
-      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile saved successfully.')),
       );
+    } on UsernameAlreadyInUseException {
+      if (!mounted) return;
+
+      setState(() {
+        _displayName = oldDisplayName;
+        _username = oldUsername;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This username is already taken.')),
+      );
     } catch (e) {
       if (!mounted) return;
+
+      setState(() {
+        _displayName = oldDisplayName;
+        _username = oldUsername;
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -152,49 +192,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showEditProfileDialog() async {
-    final controller = TextEditingController(text: _displayName);
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogContext) =>
+          _EditProfileDialog(displayName: _displayName, username: _username),
+    );
 
-    try {
-      final displayName = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Edit profile'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Display name',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final name = controller.text.trim();
+    if (!mounted || result == null) return;
 
-                if (name.isNotEmpty) {
-                  Navigator.of(dialogContext).pop(name);
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      );
-
-      if (displayName == null || displayName.isEmpty || !mounted) {
-        return;
-      }
-
-      await _saveProfile(displayName);
-    } finally {
-      controller.dispose();
-    }
+    await _saveProfile(result['displayName']!, result['username']!);
   }
 
   Future<void> _sendVerificationEmail() async {
@@ -358,9 +364,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result != true || !mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task added successfully.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task added successfully.')));
   }
 
   Future<void> _editTask(Task task) async {
@@ -459,9 +465,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task updated successfully.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task updated successfully.')));
   }
 
   Future<void> _toggleTask(Task task, bool completed) async {
@@ -516,18 +522,16 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task deleted.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task deleted.')));
   }
 
   Widget _buildLoadMoreButton(TaskProvider provider) {
     if (provider.isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.all(16),
-        child: Center(
-          child: CircularProgressIndicator(color: _navy),
-        ),
+        child: Center(child: CircularProgressIndicator(color: _navy)),
       );
     }
 
@@ -538,9 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onPressed: provider.hasMoreTasks ? provider.loadMoreTasks : null,
           icon: const Icon(Icons.expand_more),
           label: const Text('Load More Tasks'),
-          style: TextButton.styleFrom(
-            foregroundColor: _navy,
-          ),
+          style: TextButton.styleFrom(foregroundColor: _navy),
         ),
       ),
     );
@@ -592,12 +594,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: const Text('Send verification email'),
               ),
-              TextButton(
-                onPressed: _refreshEmailVerification,
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF754900),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _refreshEmailVerification,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color.fromARGB(255, 248, 248, 246),
+                    backgroundColor: const Color.fromARGB(179, 4, 7, 94),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                  ),
+                  child: const Text("I've verified"),
                 ),
-                child: const Text("I've verified"),
               ),
             ],
           ),
@@ -698,7 +708,11 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _displayName.isEmpty ? 'My Tasks' : 'Hello, $_displayName',
+              _username.isNotEmpty
+                  ? 'Hello, ${_username[0].toUpperCase()}${_username.substring(1)}'
+                  : _displayName.isNotEmpty
+                  ? 'Hello, $_displayName'
+                  : 'My Tasks',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -737,14 +751,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 backgroundColor: Colors.transparent,
                 backgroundImage: _profileImage != null
                     ? FileImage(_profileImage!)
-                    : (_profileImageUrl != null &&
-                          _profileImageUrl!.isNotEmpty)
+                    : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
                     ? NetworkImage(_profileImageUrl!)
                     : null,
                 child:
                     _profileImage == null &&
-                        (_profileImageUrl == null ||
-                            _profileImageUrl!.isEmpty)
+                        (_profileImageUrl == null || _profileImageUrl!.isEmpty)
                     ? const Icon(Icons.person, color: Colors.white, size: 22)
                     : null,
               ),
@@ -826,8 +838,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Column(
                     children: [
                       Expanded(child: _buildEmptyState(message)),
-                      if (provider.hasMoreTasks)
-                        _buildLoadMoreButton(provider),
+                      if (provider.hasMoreTasks) _buildLoadMoreButton(provider),
                     ],
                   );
                 }
@@ -863,11 +874,116 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: _navy,
         foregroundColor: Colors.white,
         elevation: 5,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(17),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
         child: const Icon(Icons.add, size: 29),
       ),
+    );
+  }
+}
+
+class _EditProfileDialog extends StatefulWidget {
+  final String displayName;
+  final String username;
+
+  const _EditProfileDialog({required this.displayName, required this.username});
+
+  @override
+  State<_EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends State<_EditProfileDialog> {
+  late final TextEditingController _displayNameController;
+  late final TextEditingController _usernameController;
+
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+
+    _displayNameController = TextEditingController(text: widget.displayName);
+
+    _usernameController = TextEditingController(text: widget.username);
+  }
+
+  @override
+  void dispose() {
+    _displayNameController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit profile'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _displayNameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Full name',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter your name.';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _usernameController,
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                prefixText: '@',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                final username = value?.trim() ?? '';
+
+                if (!RegExp(r'^[a-zA-Z0-9_]{3,20}$').hasMatch(username)) {
+                  return 'Use 3–20 letters, numbers, or underscores.';
+                }
+
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () {
+                  if (!_formKey.currentState!.validate()) return;
+
+                  Navigator.of(context).pop({
+                    'displayName': _displayNameController.text.trim(),
+                    'username': _usernameController.text.trim(),
+                  });
+                },
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
