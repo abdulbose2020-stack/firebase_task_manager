@@ -30,6 +30,7 @@ class AuthService {
         displayName: fullName.trim(),
         username: username.trim().toLowerCase(),
       );
+      await user.sendEmailVerification();
 
       return credential;
     } catch (e) {

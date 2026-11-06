@@ -22,7 +22,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   static const Color _navy = Color(0xFF172B4D);
   static const Color _background = Color(0xFFF5F7FB);
-  static const Color _amber = Color(0xFFFFF0D5);
   static const Color _green = Color(0xFFE1F4E9);
 
   final _authService = AuthService();
@@ -201,58 +200,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted || result == null) return;
 
     await _saveProfile(result['displayName']!, result['username']!);
-  }
-
-  Future<void> _sendVerificationEmail() async {
-    try {
-      await _authService.sendEmailVerification();
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Verification email sent. Check your inbox.'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not send verification email. Please try again.'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _refreshEmailVerification() async {
-    try {
-      await FirebaseAuth.instance.currentUser?.reload();
-
-      if (!mounted) return;
-
-      setState(() {});
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _authService.isEmailVerified
-                ? 'Your email is verified!'
-                : 'Email is not verified yet. Open the link in your inbox, then try again.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not check verification status. Please try again.',
-          ),
-        ),
-      );
-    }
   }
 
   Future<void> _addTask() async {
@@ -548,74 +495,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildVerificationNotice() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _amber,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFD58A)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.mark_email_unread_outlined, color: Color(0xFF9A6200)),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Verify your email address',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF754900),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Check your inbox for the verification link. '
-            'If you cannot find it, check your spam folder.',
-            style: TextStyle(color: Color(0xFF754900)),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ElevatedButton(
-                onPressed: _sendVerificationEmail,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _navy,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Send verification email'),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: _refreshEmailVerification,
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color.fromARGB(255, 248, 248, 246),
-                    backgroundColor: const Color.fromARGB(179, 4, 7, 94),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                  ),
-                  child: const Text("I've verified"),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFilterBar(TaskProvider provider) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 10),
@@ -785,7 +664,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          if (!_authService.isEmailVerified) _buildVerificationNotice(),
           Consumer<TaskProvider>(
             builder: (context, provider, child) {
               return _buildFilterBar(provider);

@@ -43,6 +43,7 @@ class UserService {
         'username': username,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        'emailVerificationRequired': true,
       });
 
       transaction.set(usernameRef, {
