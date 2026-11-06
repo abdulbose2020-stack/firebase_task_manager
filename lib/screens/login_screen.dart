@@ -67,33 +67,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _continueAsGuest() async {
-    if (_isLoading) return;
-
-    FocusScope.of(context).unfocus();
-
-    setState(() => _isLoading = true);
-
-    final messenger = ScaffoldMessenger.of(context);
-
-    try {
-      await _authService.signInAnonymously();
-    } catch (_) {
-      if (!mounted) return;
-
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Guest sign-in failed. Please try again.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
   Future<void> _forgotPassword() async {
     final email = _emailController.text.trim();
 
@@ -496,25 +469,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const Expanded(child: Divider(color: Color(0xFFE5E9F0))),
                 ],
-              ),
-
-              const SizedBox(height: 17),
-
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _continueAsGuest,
-                  icon: const Icon(Icons.person_outline_rounded),
-                  label: const Text('Continue as Guest'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: navy,
-                    side: const BorderSide(color: Color(0xFFE0E5ED)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
               ),
 
               const SizedBox(height: 22),

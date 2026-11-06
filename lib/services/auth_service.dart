@@ -58,11 +58,7 @@ class AuthService {
       password: password,
     );
   }
-
-  Future<UserCredential> signInAnonymously() async {
-    return await _auth.signInAnonymously();
-  }
-
+  
   Future<void> resetPassword(String email) async {
     await _auth.sendPasswordResetEmail(email: email.trim());
   }
